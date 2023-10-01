@@ -81,6 +81,14 @@ This is a limited-function version.
 
 It is not possible to move markdown files to Notion or to generate a list of articles.
 
+### 1.1.0
+
+Additional templates.
+
+It should look good if you fix template/temp.md each.
+
+If -tag1, -tag2 and -sent are not included, it will not work properly.
+
 ## Other
 
 For any other code questions, please contact us on Twitter (@today_chokankyo).
