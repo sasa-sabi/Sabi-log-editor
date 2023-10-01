@@ -1,0 +1,2 @@
+notionToken : "secret_hoge";
+notionDatabaseID : "hoge";
