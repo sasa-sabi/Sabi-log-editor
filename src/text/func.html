@@ -1,0 +1,11 @@
+<script>
+    const vscode = acquireVsCodeApi();
+
+    window.addEventListener('message', event => {
+        const message = event.data;
+        if (message.command === 'scroll') {
+            const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+            window.scrollTo(0, message.scrollYPercentage * scrollHeight);
+        }
+    });
+</script>

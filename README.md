@@ -33,6 +33,10 @@ This can be done by opening two tabs.
 
 Download the html file you have created.
 
+- ctrl + shift + U, cmd + shift + U
+
+Upload the html file to Notion page.
+
 ## Additional notation
 
 - -t(name)「(sentence)」
@@ -80,14 +84,6 @@ Initial release of sabi-log-editor.
 This is a limited-function version.
 
 It is not possible to move markdown files to Notion or to generate a list of articles.
-
-### 1.1.0
-
-Additional templates.
-
-It should look good if you fix template/temp.md each.
-
-If -tag1, -tag2 and -sent are not included, it will not work properly.
 
 ## Other
 

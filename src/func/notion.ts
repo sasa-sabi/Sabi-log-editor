@@ -1,8 +1,13 @@
+const dl=require("./download");
 const ex = require("../extension");
 
 export const getDatabase = async (databaseId: string) => {
   const response = await ex.notion.databases.query({
     database_id: databaseId || "",
+    sort: {
+      direction: "ascending",
+      timestamp: "last_edited_time",
+    },
   });
   return response;
 };
@@ -23,27 +28,28 @@ export const getBlock = async (pageId: string, nextCursor: string) => {
   return response;
 };
 
-export const pageIdDictionary = {};
+export const pageIdDictionary: { [name: string]: string } = {};
 
 export const getPageTitle = async (databeseId: string) => {
-  var selectIDs = [];
+  var selectIDs: string[] = [];
   const database = await getDatabase(databeseId);
   for (var i = 0; i < database.results.length; i++) {
-    const pagetitle = database.results[i].properties.名前.title[0].text.content;
+    const pagetitle: string = database.results[i].properties.名前.title[0].text.content;
     pageIdDictionary[pagetitle] = database.results[i].id.trim();
     selectIDs.push(pagetitle);
   }
   return selectIDs;
 };
 
-export const getPagetext = async (pageId: string, pagetitle: string) => {
+export const getPagetext = async (pageId: string, pagetitle: string, filenumber: string, selectHo: boolean) => {
   var pagetext: string = "# " + pagetitle + "\n\n";
 
   var pageidnow = "";
   var key = 0;
 
   while (key === 0) {
-      const block = await getBlock(pageId, pageidnow);
+    const block = await getBlock(pageId, pageidnow);
+    console.log(block);
     for (var i = 0; i < block.results.length; i++) {
       // # タイトル
       if (block.results[i].heading_1 !== undefined) {
@@ -59,38 +65,73 @@ export const getPagetext = async (pageId: string, pagetitle: string) => {
 
       // 本文
       else if (block.results[i].paragraph !== undefined) {
-        if (block.results[i].paragraph.rich_text.length === 0) {
-          pagetext += "\n\n";
+        // 改行
+        if (block.results[i].paragraph.rich_text.length <= 0) {
+          pagetext += "\n";
         }
-
-        // 本文(ボールド)
-        else if (
-          block.results[i].paragraph.rich_text[0].annotations.bold === true
-        ) {
-          pagetext +=
-            "**" +
-            block.results[i].paragraph.rich_text[0].plain_text +
-            "**\n\n";
-        }
-
-        // 本文(イタリック)
-        else if (
-          block.results[i].paragraph.rich_text[0].annotations.italic === true
-        ) {
-          pagetext +=
-            "*" + block.results[i].paragraph.rich_text[0].plain_text + "*\n\n";
-        }
-
-        // 本文(数式)
-        else if (block.results[i].paragraph.rich_text[0].type === "equation") {
-          pagetext +=
-            "$" + block.results[i].paragraph.rich_text[0].plain_text + "$\n\n";
-        }
-
-        // ノーマル
         else {
-          pagetext +=
-            block.results[i].paragraph.rich_text[0].plain_text + "\n\n";
+          for (var j = 0; j < block.results[i].paragraph.rich_text.length; j++) {
+            // 本文(ボールドイタリック)
+            if (
+              block.results[i].paragraph.rich_text[j].annotations.bold ===
+                true &&
+              block.results[i].paragraph.rich_text[j].annotations.italic ===
+                true
+            ) {
+              pagetext +=
+                "***" +
+                block.results[i].paragraph.rich_text[j].plain_text +
+                "*** ";
+            }
+
+            // 本文(ボールド)
+            else if (
+              block.results[i].paragraph.rich_text[j].annotations.bold === true
+            ) {
+              pagetext +=
+                "**" +
+                block.results[i].paragraph.rich_text[j].plain_text +
+                "** ";
+            }
+
+            // 本文(イタリック)
+            else if (
+              block.results[i].paragraph.rich_text[j].annotations.italic ===
+              true
+            ) {
+              pagetext +=
+                "*" + block.results[i].paragraph.rich_text[j].plain_text + "* ";
+            }
+
+            // 本文(数式)
+            else if (
+              block.results[i].paragraph.rich_text[j].type === "equation"
+            ) {
+              pagetext +=
+                "$" + block.results[i].paragraph.rich_text[j].plain_text + "$ ";
+            }
+
+            // url
+            else {
+              if (block.results[i].paragraph.rich_text[j].href !== null) {
+                pagetext +=
+                  "[" +
+                  block.results[i].paragraph.rich_text[j].plain_text +
+                  "](" +
+                  block.results[i].paragraph.rich_text[j].href +
+                  ") ";
+              }
+
+              // ノーマル
+              else {
+                var text = block.results[i].paragraph.rich_text[j].plain_text;
+                text = text.split("<").join("&lt;");
+                text = text.split(">").join("&gt;");
+                text = text.split("—p").join("\-\-p");
+              }
+            }
+          }
+          pagetext += text + "\n\n";
         }
       }
 
@@ -99,17 +140,18 @@ export const getPagetext = async (pageId: string, pagetitle: string) => {
         block.results[i].bulleted_list_item !== undefined &&
         block.results[i].has_children === true
       ) {
-        const list = await getBlock(block.results[i].id,"");
+        const list = await getBlock(block.results[i].id, "");
         pagetext +=
           "- " +
           block.results[i].bulleted_list_item.rich_text[0].plain_text +
           "\n";
         for (var j = 0; j < list.results.length; j++) {
           pagetext +=
-            "  - " +
+            "    - " +
             list.results[j].bulleted_list_item.rich_text[0].plain_text +
             "\n";
         }
+        pagetext += "\n";
       }
 
       // - リスト(not has children)
@@ -120,7 +162,7 @@ export const getPagetext = async (pageId: string, pagetitle: string) => {
         pagetext +=
           "- " +
           block.results[i].bulleted_list_item.rich_text[0].plain_text +
-          "\n";
+          "\n\n";
       }
 
       // ```コード```
@@ -129,13 +171,42 @@ export const getPagetext = async (pageId: string, pagetitle: string) => {
           "```" +
           block.results[i].code.language +
           "\n" +
-          block.results[i].code.rich_text[0].plain_text +
+          block.results[i].code.rich_text[0].plain_text.split("\n\n").join("\nsabilog\.space\n") +
           "\n```\n\n";
       }
 
       // !画像url
       else if (block.results[i].image !== undefined) {
-        pagetext += "!" + block.results[i].image.external.url + "\n\n";
+        if (block.results[i].image.type === "file") {
+          if (selectHo) {
+            // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
+            await dl.downloadImage(
+                block.results[i].image.file.url,
+                "art-" + filenumber
+              )
+              .then((secureUrl: string) => {
+                pagetext += "!" + secureUrl + "\n\n";
+              })
+              .catch((error: any) => {
+                console.error("エラー:", error);
+              });
+          }
+          else {
+            // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
+            await dl.downloadImage(
+                block.results[i].image.file.url,
+                "ur-" + filenumber
+              )
+              .then((secureUrl: string) => {
+                pagetext += "!" + secureUrl + "\n\n";
+              })
+              .catch((error: any) => {
+                console.error("エラー:", error);
+              });
+          }
+        } else if (block.results[i].image.type === "external") {
+          pagetext += "!" + block.results[i].image.external.url.split(" ").join("%20") + "\n\n";
+        }
       }
 
       // ---ページ区切り
@@ -145,10 +216,82 @@ export const getPagetext = async (pageId: string, pagetitle: string) => {
     }
 
     if (block.next_cursor === null) {
-        key += 1;
+      key += 1;
     } else {
       pageidnow = block.next_cursor;
     }
   }
-  return pagetext;
+  return pagetext.split("\n").slice(0, -3).join("\n");
+};
+
+export const createNotionPage = async (
+  pageTitle:string,
+  pageScript: string[],
+  pageNumber: string,
+  pageNameHo: boolean,
+) => {
+  const databaseId = ex.notionDatabaseID.replace(
+    /(.{8})(.{4})(.{4})(.{4})(.{12})/,
+    "$1-$2-$3-$4-$5"
+  );
+  try {
+    // ページを検索
+    const searchResults = await ex.notion.search({
+      query: pageTitle,
+      filter: {
+        value: "page",
+        property: "object",
+      },
+    });
+
+    // ページの削除
+    if (searchResults.results.length > 0) {
+      const pageId = searchResults.results[0].id;
+      const response = await ex.notion.pages.update({
+        page_id: pageId,
+        archived: true,
+      });
+    }
+
+    var pageTag = "";
+    if (pageNameHo) {
+      pageTag="art";
+    }
+    else {
+      pageTag="ura";
+    }
+    
+    // ページの作成
+    const newPage = await ex.notion.pages.create({
+        parent: {
+          database_id: databaseId,
+        },
+        properties: {
+          名前: {
+            title: [
+              {
+                text: {
+                  content: pageTitle,
+                },
+              },
+            ]
+          },
+          タグ: {
+            multi_select: [
+              {
+                name: pageNumber
+              },
+              {
+                name: pageTag
+              }
+            ]
+          }
+        },
+        children: pageScript,
+    });
+    
+    console.log(`新しいページを作成しました: ${newPage.url}`);
+  } catch (error) {
+    console.error("エラー:", error);
+  }
 };

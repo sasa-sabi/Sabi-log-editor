@@ -1,20 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadHtml = exports.downloadMarkdown = void 0;
+exports.downloadImage = exports.downloadHtml = exports.downloadMarkdown = void 0;
 const vscode = require("vscode");
+const axios_1 = require("axios");
+const cloudinary_1 = require("cloudinary");
 const path = require("path");
 const ex = require("../extension");
 const nn = require("./notion");
 const cv = require("./convert");
-const downloadMarkdown = async (pageId, pagetitle, filenumber) => {
-    const filename = "art-" + filenumber + ".md";
+const csv = require("./csv");
+const dic = require("../text/dictional");
+const downloadMarkdown = async (pageId, pagetitle, filenumber, selectHo) => {
+    var filename = "";
+    if (selectHo) {
+        filename = "art-" + filenumber + ".md";
+    }
+    else {
+        filename = "ur-" + filenumber + ".md";
+    }
     // ファイルパスの準備
-    const editor = vscode.window.activeTextEditor;
-    const filePath = editor?.document?.fileName || "";
-    const directoryPath = path.dirname(filePath);
-    const newfilePath = path.join(directoryPath, filename);
+    const filePath = vscode.workspace.workspaceFolders;
+    var newfilePath = "";
+    if (filePath && filePath.length > 0) {
+        newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\" + filename);
+    }
     // テキストをUint8Arrayに変換
-    const script = await nn.getPagetext(pageId, pagetitle);
+    const script = await nn.getPagetext(pageId, pagetitle, filenumber, selectHo);
     const blob = Buffer.from(script);
     // ファイルへ書き込む
     await vscode.workspace.fs.writeFile(vscode.Uri.file(newfilePath), blob);
@@ -23,26 +34,36 @@ const downloadMarkdown = async (pageId, pagetitle, filenumber) => {
     return;
 };
 exports.downloadMarkdown = downloadMarkdown;
-const downloadHtml = async (artnumber) => {
+const downloadHtml = async (artnumber, artdate, artbool) => {
     // ファイルを読み込む
     const editor = vscode.window.activeTextEditor;
-    const filePath = editor?.document?.fileName || "";
-    const directoryPath = path.dirname(filePath);
-    const newfilePath = path.join(directoryPath, "ho-" + artnumber + ".html");
+    const filePath = vscode.workspace.workspaceFolders;
+    var newfilePath = "";
+    if (filePath && filePath.length > 0) {
+        if (artbool) {
+            newfilePath = path.join(filePath[0].uri?.fsPath, "articles\\ho-0" + artnumber + ".html");
+        }
+        else {
+            newfilePath = path.join(filePath[0].uri?.fsPath, "ur\\ur-0" + artnumber + ".html");
+        }
+    }
     if (editor !== undefined) {
         const arttext = editor.document.getText();
-        const pages = arttext.split("—p");
-        const topwindow = pages[0].split("---");
+        const pages = arttext.split(/\-\-p/);
+        const topwindow = pages[0].split(/\-\-\-/);
+        console.log(topwindow);
         const header = topwindow[0].split("\n\n");
         const headertitle = header[0].substring(2);
         const headersent = header[2];
         const imageurl = header[1].substring(1);
-        const archivesent = header[6].substring(6);
-        const tag1 = header[4].substring(6);
-        const tag2 = header[5].substring(6);
+        const archivesent = header[5].substring(6);
+        const tag1 = header[3].substring(6);
+        const tag2 = header[4].substring(6);
+        var multipage = 0;
         for (var i = 0; i < pages.length; i++) {
             const pagenumber = "-" + `${i + 1}`;
-            const script = cv.makeDownloadFile(pages[i], i, pages.length, artnumber, pagenumber, headertitle, headersent, imageurl, archivesent);
+            multipage = i;
+            const script = cv.makeDownloadFile(pages[i], i, pages.length, artnumber, pagenumber, headertitle, headersent, imageurl, archivesent, pages.length, pages[i + 1]);
             var newfilepath = "";
             if (pages.length > 1) {
                 newfilepath = newfilePath.replace(/\.html$/, pagenumber + ".html");
@@ -57,15 +78,102 @@ const downloadHtml = async (artnumber) => {
             console.log(newfilepath);
             vscode.window.showInformationMessage("downloaded!");
         }
+        if (artbool) {
+            downloadArchive(artnumber, headertitle, tag1, tag2, imageurl, artdate, multipage);
+        }
+        else {
+            csv.editAdminUr(artnumber, headertitle, imageurl);
+        }
     }
     ;
 };
 exports.downloadHtml = downloadHtml;
-const downloadArchive = async (artnumber, arttitle, arttag1, arttag2, artheader) => {
-    var mainArchive = "";
-    for (var i = 0; i < parseInt(artnumber); i++) {
-        console.log("停止機能");
+const downloadArchive = async (artnumber, arttitle, arttag1, arttag2, artheader, uploaddate, multipage) => {
+    const filePath = vscode.workspace.workspaceFolders;
+    var newArticle = ex.archiveContent.split("sabilog_archiveTitle").join(arttitle);
+    newArticle = newArticle.split("sabilog_uploadDate").join(uploaddate);
+    newArticle = newArticle.split("sabilog_tag1").join(arttag1);
+    newArticle = newArticle.split("sabilog_tag2").join(arttag2);
+    newArticle = newArticle.split("sabilog_num").join(artnumber);
+    if (multipage === 0) {
+        newArticle = newArticle.split("sabilog_multi").join("");
     }
-    ex.editAdmin(artnumber, arttitle, arttag1, arttag2, artheader);
+    else {
+        newArticle = newArticle.split("sabilog_multi").join("-1");
+    }
+    for (var i = 0; i < 3; i++) {
+        var archive = "";
+        var article = newArticle;
+        if (filePath && filePath.length > 0) {
+            if (i === 0) {
+                archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, "archive.html"));
+                article = article
+                    .split("sabilog_tagurl1")
+                    .join("./" + dic.Archives[arttag1]);
+                article = article
+                    .split("sabilog_tagurl2")
+                    .join("./" + dic.Archives[arttag2]);
+            }
+            else if (i === 1) {
+                archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, dic.Archives[arttag1]));
+                article = article.split("sabilog_tagurl1").join("#");
+                article = article
+                    .split("sabilog_tagurl2")
+                    .join("./" + dic.Archives[arttag2]);
+            }
+            else {
+                archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, dic.Archives[arttag2]));
+                article = article
+                    .split("sabilog_tagurl1")
+                    .join("./" + dic.Archives[arttag1]);
+                article = article.split("sabilog_tagurl2").join("#");
+            }
+            archive = archive.replace("<!--sabilog_newart-->", "<!--sabilog_newart-->\n\n" + article);
+            // テキストをUint8Arrayに変換
+            const blob = Buffer.from(archive);
+            var archiveName = "";
+            if (i === 0) {
+                archiveName = "archive.html";
+            }
+            else if (i === 1) {
+                archiveName = dic.Archives[arttag1];
+            }
+            else if (i === 2) {
+                archiveName = dic.Archives[arttag2];
+            }
+            // ファイルへ書き込む
+            await vscode.workspace.fs.writeFile(vscode.Uri.file(path.join(filePath[0].uri?.fsPath, archiveName)), blob);
+        }
+    }
+    csv.editAdmin(artnumber, arttitle, arttag1, arttag2, artheader);
 };
+async function downloadImage(imageUrl, folderName) {
+    try {
+        const response = await axios_1.default.get(imageUrl, { responseType: "arraybuffer" });
+        return new Promise((resolve) => {
+            const uploadResult = cloudinary_1.v2.uploader.upload_stream({
+                upload_preset: "ml_default",
+                folder: folderName, // 任意のフォルダ名
+            }, (error, result) => {
+                if (error) {
+                    console.error("Cloudinaryアップロードエラー:", error);
+                }
+                else {
+                    if (result) {
+                        resolve(result.secure_url);
+                    }
+                    ;
+                }
+                ;
+            });
+            uploadResult.end(Buffer.from(response.data));
+        });
+    }
+    catch (error) {
+        console.error("エラー:", error);
+        return "";
+    }
+}
+exports.downloadImage = downloadImage;
+;
 //# sourceMappingURL=download.js.map

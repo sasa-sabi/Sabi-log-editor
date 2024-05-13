@@ -9,7 +9,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -24,6 +26,14 @@
       {
         "command": "sabilog.downhtml",
         "title": "Download html file"
+      },
+      {
+        "command": "sabilog.updatemd",
+        "title": "Update md page in notion"
+      },
+      {
+        "command": "sabilog.debug",
+        "title": "Debug"
       }
     ],
     "keybindings": [
@@ -41,6 +51,16 @@
         "command": "sabilog.downhtml",
         "key": "ctrl+shift+l",
         "mac": "cmd+shift+l"
+      },
+      {
+        "command": "sabilog.updatemd",
+        "key": "ctrl+shift+u",
+        "mac": "cmd+shift+u"
+      },
+      {
+        "command": "sabilog.debug",
+        "key": "ctrl+shift+F4",
+        "mac": "cmd+shift+F4"
       }
     ],
     "menus": {
@@ -56,6 +76,31 @@
         {
           "command": "sabilog.downhtml",
           "group": "sabilog-navigation"
+        },
+        {
+          "command": "sabilog.updatemd",
+          "group": "sabilog-navigation"
+        },
+        {
+          "command": "sabilog.debug",
+          "group": "sabilog-debug"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sabilog_editor",
+          "title": "sabilogエディタ",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "sabilog_editor": [
+        {
+          "id": "sabilog_webview",
+          "name": "markdownエディタ"
         }
       ]
     }
@@ -83,6 +128,7 @@
   },
   "dependencies": {
     "@notionhq/client": "^2.2.13",
-    "csv-parser": "^3.0.0"
+    "axios": "^1.5.1",
+    "cloudinary": "^1.41.0"
   }
 }
