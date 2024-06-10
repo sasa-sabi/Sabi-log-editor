@@ -2,9 +2,10 @@ import * as vscode from "vscode";
 
 const ex = require("../extension");
 const dic = require("../text/dictional");
+const dl = require("./download");
 
 // Markdownのコンバート
-export function convertMd(code: string) {
+export function convertMd(code: string, filePath: string, updateNumber: number) {
   // 正規表現パターンを定義
   var pattern_h1 = /^#\s+([\s\S]*?)$/;
   var pattern_h2 = /^##\s+([\s\S]*?)$/;
@@ -17,8 +18,10 @@ export function convertMd(code: string) {
   var pattern_decomemo = /^\-mc([\s\S]*?)「([\s\S]*?)」$/;
   var pattern_memo = /^\-m([\s\S]*?)「([\s\S]*?)」$/;
   var pattern_baloon = /^\-t([\s\S]*?)「([\s\S]*?)」$/;
+  var pattern_image_a=/^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
   var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
 
+  const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
   const window_str = code.split("\n\n");
   var complish_str = "";
   let how_time_p: boolean[] = [];
@@ -140,6 +143,42 @@ export function convertMd(code: string) {
         "</strong></p>\n";
     }
     // 画像の変換
+    else if (pattern_image_a.test(window_str[k])) {
+      if (updateNumber === 1) {
+        var match = pattern_image_a.exec(window_str[k]);
+
+        if (match !== null) {
+          complish_str +=
+            '\n\t\t<img alt="' + match[1] +
+            '" class="art-image" />\n';
+        }
+      }
+      else if (updateNumber === 2) {
+        var match = pattern_image_a.exec(window_str[k]);
+
+        if (match && line_serch) {
+          var lineNumber = 0;
+          for (let i = 0; i < line_serch.length; i++) {
+            if (line_serch[i].includes(`(${match[2]})`)) {
+              lineNumber = i;
+            }
+          }
+          
+          console.log(filePath+match[2]);
+          dl.uploadAndDeleteImage(
+            filePath+match[2],
+            "draft",
+            lineNumber
+          )
+          .then((secureUrl: string) => {
+            complish_str += '\n\t\t<img src="' + secureUrl + '" class="art-image" />\n';
+          })
+          .catch((error: any) => {
+            console.error("エラー:", error);
+          });
+        }
+      }
+    }
     else if (pattern_image.test(window_str[k])) {
       complish_str +=
         '\n\t\t<img src="' +
@@ -205,79 +244,81 @@ export function convertMd(code: string) {
   return complish_str;
 }
 
-export function makeDisplay(mark: vscode.TextEditor) {
+export function makeDisplay(mark: vscode.TextEditor, filePath: string, updateNumber: number) {
   var convertedHtml = "";
   var markdown = mark.document.getText();
   const pages = markdown.split("--p");
   const titleWindow = pages[0].split("---")[0];
 
   for (var k = 0; k < pages.length; k++) {
-      const window = pages[k].split("---"); // 「---」で文章を区切る
-      if (k === 0)    {
-          for (var i = 0; i < window.length; i++) {
-              if (i === 0) {
-                const header = titleWindow.split("\n\n");
+    const window = pages[k].split("---"); // 「---」で文章を区切る
+      if (k === 0) {
+        for (var i = 0; i < window.length; i++) {
+          if (i === 0) {
+            const header = titleWindow.split("\n\n");
 
-                  convertedHtml +=
-                    '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
-                    '<div class="toppageImage" style="background-image: url(' +
-                    header[1].substring(1) +
-                    ');"></div>\n\t\t<h1>' +
-                    header[0].substring(2) +
-                    "</h1>\n\t\t<p>" +
-                    header[2] +
-                    "</p>\n\t\t</div>\n\t</div>";
-              } else if (i === 1) {
-                  if (i === window.length - 1) {
-                      convertedHtml +=
-                        '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                        convertMd(window[1]) +
-                        "\n\t\t</div>";
-                  } else {
-                      convertedHtml +=
-                        '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                        convertMd(window[1]) +
-                        "\n\t\t</div>";
-                  }
-              } else if (i === window.length - 1) {
-                  convertedHtml +=
-                      '\n\t\t<div class="window window-end">\n\t\t' +
-                      convertMd(window[i]) +
-                      "\n\t\t</div>";
-              } else {
+            convertedHtml +=
+              '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
+              '<div class="toppageImage" style="background-image: url(' +
+              header[1].substring(1) +
+              ');"></div>\n\t\t<h1>' +
+              header[0].substring(2) +
+              "</h1>\n\t\t<p>" +
+              header[2] +
+              "</p>\n\t\t</div>\n\t</div>";
+          } else if (i === 1) {
+            if (i === window.length - 1) {
               convertedHtml +=
-                  '\n\t\t<div class="window">\n\t\t' + convertMd(window[i]) + "\n\t\t</div>";
-              }
+                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
+                convertMd(window[1], filePath, updateNumber) +
+                "\n\t\t</div>";
+            } else {
+              convertedHtml +=
+                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
+                convertMd(window[1], filePath, updateNumber) +
+                "\n\t\t</div>";
+            }
+          } else if (i === window.length - 1) {
+            convertedHtml +=
+              '\n\t\t<div class="window window-end">\n\t\t' +
+              convertMd(window[i], filePath, updateNumber) +
+              "\n\t\t</div>";
+          } else {
+            convertedHtml +=
+              '\n\t\t<div class="window">\n\t\t' +
+              convertMd(window[i], filePath, updateNumber) +
+              "\n\t\t</div>";
           }
+        }
       } else {
-          for (var i = 0; i < window.length; i++) {
-              if (i === 0) {
-                  if (i === window.length - 1) {
-                    convertedHtml +=
-                      '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                      convertMd(window[0]) +
-                      "\n\t\t</div>";
-                  } else {
-                    convertedHtml +=
-                      '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                      convertMd(window[0]) +
-                      "\n\t\t</div>";
-                  }
-              } else if (i === window.length - 1) {
-                  convertedHtml +=
-                  '\n\t\t<div class="window window-end">\n\t\t' +
-                  convertMd(window[i]) +
-                  "\n\t\t</div>";
-              } else {
-                  convertedHtml +=
-                  '\n\t\t<div class="window">\n\t\t' +
-                  convertMd(window[i]) +
-                  "\n\t\t</div>";
-              }
+        for (var i = 0; i < window.length; i++) {
+          if (i === 0) {
+            if (i === window.length - 1) {
+              convertedHtml +=
+                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
+                convertMd(window[0], filePath, updateNumber) +
+                "\n\t\t</div>";
+            } else {
+              convertedHtml +=
+                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
+                convertMd(window[0], filePath, updateNumber) +
+                "\n\t\t</div>";
+            }
+          } else if (i === window.length - 1) {
+            convertedHtml +=
+              '\n\t\t<div class="window window-end">\n\t\t' +
+              convertMd(window[i], filePath, updateNumber) +
+              "\n\t\t</div>";
+          } else {
+            convertedHtml +=
+              '\n\t\t<div class="window">\n\t\t' +
+              convertMd(window[i], filePath, updateNumber) +
+              "\n\t\t</div>";
           }
+        }
       }
-
-  convertedHtml += "\n\t</div>";
+    
+    convertedHtml += "\n\t</div>";
   }
   return convertedHtml;
 }
@@ -293,7 +334,8 @@ export function makeDownloadFile(
   imageurl: string,
   archivesent: string,
   maxpage: number,
-  nextpages: string
+  nextpages: string,
+  filepath: string
 ) {
   var convertedHtml = "";
 
@@ -327,32 +369,32 @@ export function makeDownloadFile(
             convertedHtml +=
               '\n<div class="headline">' +
               '\n\n\t<div class="top-window window-end">\n' +
-              convertMd(window[1]) +
+              convertMd(window[1], filepath, 2) +
               "\n\t</div>";
           } else {
             convertedHtml +=
               '\n<div class="headline">' +
               '\n\n\t<div class="top-window">\n' +
-              convertMd(window[1]) +
+              convertMd(window[1], filepath, 2) +
               "\n\t</div>";
           }
         } else if (i === window.length - 1) {
           convertedHtml +=
             '\n\t<div class="window window-end">\n' +
-            convertMd(window[i]) +
+            convertMd(window[i], filepath, 2) +
             "\n\t</div>";
         } else {
           convertedHtml +=
             '\n\t<div class="window">\n' +
-            convertMd(window[i]) +
+            convertMd(window[i], filepath, 2) +
             "\n\t</div>";
         }
       }
 
     convertedHtml += "\n\t</div>";
     } else {
-        icons = icons.split("sabilog_pagenum");
-        icons = icons.join(pagenum);
+      icons = icons.split("sabilog_pagenum");
+      icons = icons.join(pagenum);
       if (k === 0) {
         var top_next = ex.topnextContent;
         var down_next = "";
@@ -412,24 +454,24 @@ export function makeDownloadFile(
           } else if (i === 1) {
             if (i === window.length - 1) {
               convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +top_next+"\n\t\t"+
-                convertMd(window[1]) +"\n\t\t"+down_next+
+                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' + top_next + "\n\t\t" +
+                convertMd(window[1], filepath, 2) + "\n\t\t" + down_next +
                 "\n\t\t</div>";
             } else {
               convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +top_next+
-                convertMd(window[1]) +
+                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' + top_next +
+                convertMd(window[1], filepath, 2) +
                 "\n\t\t</div>";
             }
           } else if (i === window.length - 1) {
             convertedHtml +=
               '\n\t\t<div class="window window-end">\n\t\t' +
-              convertMd(window[i]) +"\n\t\t"+down_next+
+              convertMd(window[i], filepath, 2) + "\n\t\t" + down_next +
               "\n\t\t</div>";
           } else {
             convertedHtml +=
               '\n\t\t<div class="window">\n\t\t' +
-              convertMd(window[i]) +
+              convertMd(window[i], filepath, 2) +
               "\n\t\t</div>";
           }
         }
@@ -506,29 +548,29 @@ export function makeDownloadFile(
             if (i === window.length - 1) {
               convertedHtml +=
                 '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                top_next +"\n\t\t"+
-                convertMd(window[0]) +
+                top_next + "\n\t\t" +
+                convertMd(window[0], filepath, 2) +
                 "\n\t\t" +
                 down_next +
                 "\n\t\t</div>";
             } else {
               convertedHtml +=
                 '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                top_next +"\n"+
-                convertMd(window[0]) +
+                top_next + "\n" +
+                convertMd(window[0], filepath, 2) +
                 "\n\t\t</div>";
             }
           } else if (i === window.length - 1) {
             convertedHtml +=
               '\n\t\t<div class="window window-end">\n\t\t' +
-              convertMd(window[i]) +
+              convertMd(window[i], filepath, 2) +
               "\n\t\t" +
               down_next +
               "\n\t\t</div>";
           } else {
             convertedHtml +=
               '\n\t\t<div class="window">\n\t\t' +
-              convertMd(window[i]) +
+              convertMd(window[i], filepath, 2) +
               "\n\t\t</div>";
           }
         }
@@ -539,7 +581,7 @@ export function makeDownloadFile(
   return header + convertedHtml + ex.footerContent;
 }
 
-export function makeUpdateFile(mark: vscode.TextEditor) {
+export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
   // 正規表現パターンを定義
   var pattern_h1 = /^#\s+([\s\S]*?)$/;
   var pattern_h2 = /^##\s+([\s\S]*?)$/;
@@ -549,6 +591,7 @@ export function makeUpdateFile(mark: vscode.TextEditor) {
   var pattern_link =/\[([\s\S]*?)\]\(([\s\S]*?)\)\s*/;
   var pattern_content = /^\-\s([\s\S]*?)$/;
   var pattern_code = /^```([\s\S]*?)\n([\s\S]*?)```$/m;
+  var pattern_image_a=/^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
   var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
   var pattern_label = /^\-p\s([\s\S]*?)$/;
   var pattern_baloon = /^\-t([\s\S]*?)「([\s\S]*?)」$/;
@@ -560,6 +603,7 @@ export function makeUpdateFile(mark: vscode.TextEditor) {
   var pattern_separate = /^\-\-\-$/;
   var pattern_newline = /^([\s\S]*?)\n*$/;
 
+  const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
   const markdown = mark.document.getText();
   const pages = markdown.split("\n\n");
   var pagescript = [];
@@ -626,6 +670,41 @@ export function makeUpdateFile(mark: vscode.TextEditor) {
       }
     }
     // 画像の変換
+    else if (pattern_image_a.test(pages[k])) {
+      var match = pattern_image_a.exec(pages[k]);
+
+        if (match && line_serch) {
+          var lineNumber = 0;
+          for (let i = 0; i < line_serch.length; i++) {
+            if (line_serch[i].includes(`(${match[2]})`)) {
+              lineNumber = i;
+            }
+          }
+          
+          console.log(filePath+match[2]);
+          dl.uploadAndDeleteImage(
+            filePath+match[2],
+            "draft",
+            lineNumber
+          )
+          .then((secureUrl: string) => {
+            pagescript.push(
+              {
+                type: "image",
+                image: {
+                  type: "external",
+                  external: {
+                    url: secureUrl,
+                  },
+                },
+              }
+            );
+          })
+          .catch((error: any) => {
+            console.error("エラー:", error);
+          });
+        }
+    }
     else if (pattern_image.test(pages[k])) {
       pagescript.push(
         {
@@ -715,7 +794,8 @@ export function makeUpdateFile(mark: vscode.TextEditor) {
           );
         }
         else {
-          const letters = match_letter[1].split(" ");
+         const letters = match_letter[1].split(" ");
+         console.log(letters);
           var text = [];
           for (var i = 0; i < letters.length; i++){
             // 強調斜体（***テキスト***）の変換
@@ -782,17 +862,29 @@ export function makeUpdateFile(mark: vscode.TextEditor) {
                 );
               }
             }
+            // 本文の変換
             else {
-              text.push(
-                {
-                  text: {
-                    content: letters[i]
-                  }
-                },
-              );
+              if (i !== letters.length - 1) {
+                text.push(
+                  {
+                    text: {
+                      content: letters[i] + " "
+                    }
+                  },
+                );
+              }
+              else {
+                text.push(
+                  {
+                    text: {
+                      content: letters[i]
+                    }
+                  },
+                );
+              }
             }
           }
-
+         console.log(text);
           pagescript.push(
             {
               object: "block",
@@ -806,4 +898,25 @@ export function makeUpdateFile(mark: vscode.TextEditor) {
     }
   }
   return pagescript;
+}
+
+export async function replaceImage(lineNumber: number, url: string) {
+  let editor = vscode.window.activeTextEditor;
+
+  if (editor) {
+    const document = editor.document;
+
+    editor.edit(editBuilder => {
+      const line = document.lineAt(lineNumber);
+      const range = new vscode.Range(line.range.start, line.range.end);
+      editBuilder.delete(range);
+      editBuilder.insert(new vscode.Position(lineNumber, 0), "!"+url);
+    }).then(success => {
+      if (success) {
+        console.log(`Replaced ${url}`);
+      } else {
+        console.error('Failed to replace line');
+      }
+    });
+  }
 }

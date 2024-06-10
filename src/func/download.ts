@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 
+const fs = require("fs");
 const path = require("path");
 const ex = require("../extension");
 const nn = require("./notion");
@@ -34,7 +35,7 @@ export const downloadMarkdown = async (
   }
 
   // テキストをUint8Arrayに変換
-  const script = await nn.getPagetext(pageId, pagetitle, filenumber,selectHo);
+  const script = await nn.getPagetext(pageId, pagetitle, filenumber, selectHo);
   const blob: Uint8Array = Buffer.from(script);
 
   // ファイルへ書き込む
@@ -65,7 +66,7 @@ export const downloadHtml = async (artnumber: string, artdate: string, artbool: 
     }
   }
 
-  if (editor !== undefined) {
+  if (editor) {
     const arttext = editor.document.getText();
     const pages = arttext.split(/\-\-p/);
     const topwindow = pages[0].split(/\-\-\-/);
@@ -228,3 +229,48 @@ export async function downloadImage(
     return "";
   }
 };
+
+export async function uploadImageFromPath(
+  imagePath: string,
+  folderName: string
+) {
+  try {
+    const imageData = fs.readFileSync(imagePath);
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                upload_preset: 'ml_default',
+                folder: folderName, // 任意のフォルダ名
+            },
+            (error, result) => {
+                if (error) {
+                    console.error('Cloudinary upload error:', error);
+                    reject(error);
+                } else {
+                    if (result) {
+                        resolve(result.secure_url);
+                    }
+                }
+            }
+        );
+        uploadStream.end(imageData);
+    });
+  } catch (error) {
+      console.error('Error:', error);
+      throw new Error('Failed to upload image');
+  }
+}
+
+export async function uploadAndDeleteImage(imagePath: string, folderName: string, lineNumber: number) {
+  try {
+    const imageUrl = await uploadImageFromPath(imagePath, folderName);
+    console.log(`Image uploaded to Cloudinary: ${imageUrl}`);
+    fs.unlinkSync(imagePath); // 画像ファイルを削除
+    cv.replaceImage(lineNumber, imageUrl);
+    
+    return imageUrl;
+  } catch (error) {
+    console.error('Error:', error);
+    throw new Error('Failed to upload image');
+  }
+}

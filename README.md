@@ -33,10 +33,6 @@ This can be done by opening two tabs.
 
 Download the html file you have created.
 
-- ctrl + shift + U, cmd + shift + U
-
-Upload the html file to Notion page.
-
 ## Additional notation
 
 - -t(name)「(sentence)」

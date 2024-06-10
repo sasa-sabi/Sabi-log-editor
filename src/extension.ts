@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Client } from '@notionhq/client';
 import { v2 as cloudinary } from "cloudinary";
+import { config } from 'dotenv';
 
 const fs = require("fs");
 const path = require("path");
@@ -24,41 +25,8 @@ export function readStringFromFile(filePath:string) {
 }
 
 // envファイルの読み取り
-export function readAPIpass(filePath: string, key: number) {
-  try {
-    const data = fs.readFileSync(textpath + filePath, "utf8");
-    if (key === 0) {
-      const notionTokenMatch = data.match(/notionToken*=*"([^"]+)"/);
-      return notionTokenMatch[1];
-    } else if (key === 1) {
-      const notionDatabaseIDMatch = data.match(/notionDatabaseID*=*"([^"]+)"/);
-      return notionDatabaseIDMatch[1];
-    } else if (key === 2) {
-      const cloudNameMatch = data.match(/cloudName*=*"([^"]+)"/);
-      return cloudNameMatch[1];
-    } else if (key === 3) {
-      const cloudApiKeyMatch = data.match(/cloudApiKey*=*"([^"]+)"/);
-      return cloudApiKeyMatch[1];
-    } else if (key === 4) {
-      const cloudSecretKeyMatch = data.match(/cloudSecretKey*=*"([^"]+)"/);
-      return cloudSecretKeyMatch[1];
-    } else if (key === 5) {
-      const webviewUpdateOverTimeMatch = data.match(/webviewUpdateOverTime*=*"([^"]+)"/);
-      return webviewUpdateOverTimeMatch[1];
-    } else if (key === 6) {
-      const updateTickTimeMatch = data.match(/updateTickTime*=*"([^"]+)"/);
-      return updateTickTimeMatch[1];
-    }
-    // 試験的実装
-    else if (key === 101) {
-      const synchronousScrollMatch = data.match(/synchronousScroll*=*"([^"]+)"/);
-      return synchronousScrollMatch[1];
-    }
-  } catch (error: any) {
-    console.error("ファイルの読み込みエラー:", error.message);
-    return null;
-  }
-}
+const envPath = path.join(__dirname, '../.env');
+config({ path: envPath });
 
 // 外部テキスト、envファイルの設定
 export const cssContent =
@@ -72,18 +40,18 @@ export const funcContent = readStringFromFile(textpath + "func.html");
 export const topnextContent = readStringFromFile(textpath + "top_next.html");
 export const downnextContent = readStringFromFile(textpath + "down_next.html");
 
-export const notionToken = readAPIpass(".env",0);
-export const notionDatabaseID = readAPIpass(".env", 1);
+export const notionToken = process.env.notion_token;
+export const notionDatabaseID = process.env.notion_database_ID;
 
-export const cloudName = readAPIpass(".env", 2);
-export const cloudApiKey = readAPIpass(".env", 3);
-export const cloudSecretKey = readAPIpass(".env", 4);
+export const cloudName = process.env.cloud_name;
+export const cloudApiKey = process.env.cloud_api_key;
+export const cloudSecretKey = process.env.cloud_secret_key;
 
 
-export const webviewUpdateOverTime = readAPIpass(".env", 5);
-export const updateTickTime = readAPIpass(".env", 6);
+export const webviewUpdateOverTime = process.env.webview_update_overtime;
+export const updateTickTime = Number(process.env.update_tick_time);
 
-export const synchronousScroll = readAPIpass(".env", 101);
+export const synchronousScroll = process.env.synchronous_scroll;
 
 // トークン読み込み
 export const notion = new Client({ auth: notionToken, });
@@ -271,12 +239,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      const selectTitle = await nn.getPageTitle(notionDatabaseID);
+      const [selectTitle, selectTag] = await nn.getPageTitle(notionDatabaseID);
       const selectedOption = await vscode.window.showQuickPick(selectTitle, {
         placeHolder: "Choose an option.",
       });
       if (selectedOption) {
         const selecttitle: string = selectedOption;
+        const selecttag: string = selectTag[selectTitle.indexOf(selectedOption)];
         const selectpageId = nn.pageIdDictionary[selecttitle];
 
         try {
@@ -290,31 +259,47 @@ export function activate(context: vscode.ExtensionContext) {
           // フォルダ内のファイルを取得
           const files = fs.readdirSync(newfilePath);
 
-          let maxArtNumber = 0;
-          if (selectedho) {
-            files.forEach((file: string) => {
-              const match = /^art-(\d+)\.md$/.exec(file);
+          let maxArtNumber = 1;
+          if (selecttag !== "none") {
+            if (selectedho) {
+              var match = /art\-([\s\S]*?)\.md/.exec(selecttag);
               if (match) {
-                const artNumber = parseInt(match[1]);
-                if (artNumber > maxArtNumber) {
-                  maxArtNumber = artNumber;
-                }
+                maxArtNumber = Number(match[1]);
               }
-            });
+            }
+            else {
+              var match = /ho\-([\s\S]*?)\.md/.exec(selecttag);
+              if (match) {
+                maxArtNumber = Number(match[1]);
+              }
+            }
           }
           else {
-            files.forEach((file: string) => {
-              const match = /^ur-(\d+)\.md$/.exec(file);
-              if (match) {
-                const artNumber = parseInt(match[1]);
-                if (artNumber > maxArtNumber) {
-                  maxArtNumber = artNumber;
+            if (selectedho) {
+              files.forEach((file: string) => {
+                const match = /^art-(\d+)\.md$/.exec(file);
+                if (match) {
+                  const artNumber = parseInt(match[1]);
+                  if (artNumber > maxArtNumber) {
+                    maxArtNumber = artNumber + 1;
+                  }
                 }
-              }
-            });
+              });
+            }
+            else {
+              files.forEach((file: string) => {
+                const match = /^ur-(\d+)\.md$/.exec(file);
+                if (match) {
+                  const artNumber = parseInt(match[1]);
+                  if (artNumber > maxArtNumber) {
+                    maxArtNumber = artNumber + 1;
+                  }
+                }
+              });
+            }
           }
-
-          dl.downloadMarkdown(selectpageId, selecttitle, maxArtNumber + 1,selectedho);
+          console.log(selectpageId, selecttitle, maxArtNumber, selectedho);
+          dl.downloadMarkdown(selectpageId, selecttitle, maxArtNumber, selectedho);
         } catch (error) {
           dl.downloadMarkdown(selectpageId, selecttitle, 1);
         }
@@ -328,6 +313,13 @@ export function activate(context: vscode.ExtensionContext) {
       const columnToShowIn = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
 
       if (columnToShowIn) {
+        // ファイルパスの準備
+        const filePath = vscode.workspace.workspaceFolders;
+        var newfilePath = "";
+        if (filePath && filePath.length > 0) {
+          newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\");
+        }
+        
         const panel = vscode.window.createWebviewPanel(
           "markdown editor",
           "MARKS EDITOR",
@@ -339,7 +331,13 @@ export function activate(context: vscode.ExtensionContext) {
 
         const updateWebview = () => {
           if (active_editor !== undefined) {
-            panel.webview.html = getWebviewContent(cv.makeDisplay(active_editor));
+            panel.webview.html = getWebviewContent(cv.makeDisplay(active_editor,newfilePath,1));
+          }
+        };
+
+        const updateWebviewAndImage = () => {
+          if (active_editor !== undefined) {
+            panel.webview.html = getWebviewContent(cv.makeDisplay(active_editor,newfilePath,2));
           }
         };
 
@@ -348,21 +346,21 @@ export function activate(context: vscode.ExtensionContext) {
           setInterval(updateWebview, updateTickTime);
         }
         else {
-          // テキストが変更されたら更新
+          //テキストの変更
           vscode.workspace.onDidChangeTextDocument(event => {
             if (active_editor && event.document === active_editor.document){
               updateWebview();
             }
           });
-
-          // テキストがセーブされたら更新
+          
+          // セーブ
           vscode.workspace.onDidSaveTextDocument( event => {
             if (active_editor && event === active_editor.document){
-              updateWebview();
+              updateWebviewAndImage();
             }
           });
 
-          // タブを変更されたら更新
+          // タブの変更
           vscode.window.onDidChangeActiveTextEditor(event => {
             if (active_editor && event?.document === active_editor.document){
               updateWebview();
@@ -491,6 +489,13 @@ export function activate(context: vscode.ExtensionContext) {
   // Markdownのアップデート
   context.subscriptions.push(
     vscode.commands.registerCommand("sabilog.updatemd", async () => {
+      // ファイルパスの準備
+      const filePath = vscode.workspace.workspaceFolders;
+      var newfilePath = "";
+      if (filePath && filePath.length > 0) {
+        newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\");
+      }
+      
       const file_name_ar = active_editor?.document.fileName.split("\\");
       if (file_name_ar) {
         const file_name_num = file_name_ar.length-1;
@@ -510,7 +515,7 @@ export function activate(context: vscode.ExtensionContext) {
           const pagetitle = active_editor.document.getText().split("\n")[0];
           var match = pattern_title.exec(pagetitle);
           if (match) {
-            nn.createNotionPage(match[1], cv.makeUpdateFile(active_editor), file_name, file_ho);
+            nn.createNotionPage(match[1], cv.makeUpdateFile(active_editor, newfilePath), file_name, file_ho);
           }
         }
       }

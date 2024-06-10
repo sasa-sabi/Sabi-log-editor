@@ -9,6 +9,7 @@ export const getDatabase = async (databaseId: string) => {
       timestamp: "last_edited_time",
     },
   });
+  console.log(response);
   return response;
 };
 
@@ -31,14 +32,25 @@ export const getBlock = async (pageId: string, nextCursor: string) => {
 export const pageIdDictionary: { [name: string]: string } = {};
 
 export const getPageTitle = async (databeseId: string) => {
-  var selectIDs: string[] = [];
+  const selectIDs:string[] = [];
+  const selectTags: string[] = [];
   const database = await getDatabase(databeseId);
   for (var i = 0; i < database.results.length; i++) {
     const pagetitle: string = database.results[i].properties.名前.title[0].text.content;
-    pageIdDictionary[pagetitle] = database.results[i].id.trim();
-    selectIDs.push(pagetitle);
+    try {
+      const pagetag: string = database.results[i].properties.タグ.multi_select[0].name;
+      pageIdDictionary[pagetitle] = database.results[i].id.trim();
+      selectIDs.push(pagetitle);
+      selectTags.push(pagetag);
+    }
+    catch {
+      pageIdDictionary[pagetitle] = database.results[i].id.trim();
+      selectIDs.push(pagetitle);
+      selectTags.push("none");
+    }
   }
-  return selectIDs;
+  console.log(selectIDs);
+  return [selectIDs, selectTags];
 };
 
 export const getPagetext = async (pageId: string, pagetitle: string, filenumber: string, selectHo: boolean) => {
@@ -128,10 +140,11 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
                 text = text.split("<").join("&lt;");
                 text = text.split(">").join("&gt;");
                 text = text.split("—p").join("\-\-p");
+                pagetext += text;
               }
             }
           }
-          pagetext += text + "\n\n";
+          pagetext += "\n\n";
         }
       }
 
@@ -182,7 +195,7 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
             // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
             await dl.downloadImage(
                 block.results[i].image.file.url,
-                "art-" + filenumber
+                "art-draft"
               )
               .then((secureUrl: string) => {
                 pagetext += "!" + secureUrl + "\n\n";
@@ -195,7 +208,7 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
             // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
             await dl.downloadImage(
                 block.results[i].image.file.url,
-                "ur-" + filenumber
+                "art-draft"
               )
               .then((secureUrl: string) => {
                 pagetext += "!" + secureUrl + "\n\n";
@@ -236,7 +249,7 @@ export const createNotionPage = async (
   );
   try {
     // ページを検索
-    const searchResults = await ex.notion.search({
+    const serchResponse = await ex.notion.search({
       query: pageTitle,
       filter: {
         value: "page",
@@ -244,13 +257,16 @@ export const createNotionPage = async (
       },
     });
 
-    // ページの削除
-    if (searchResults.results.length > 0) {
-      const pageId = searchResults.results[0].id;
-      const response = await ex.notion.pages.update({
-        page_id: pageId,
-        archived: true,
-      });
+    // 検索結果を確認
+    const pages = serchResponse.results;
+    for (var i = 0; i < pages.length; i++) {
+      const titleArray = pages[i].properties.名前.title;
+      if (titleArray.length > 0 && titleArray[0].text.content === pageTitle) {
+        const response = await ex.notion.pages.update({
+          page_id: pages[i].id,
+          archived: true,
+        });
+      }
     }
 
     var pageTag = "";
@@ -260,36 +276,49 @@ export const createNotionPage = async (
     else {
       pageTag="ura";
     }
-    
-    // ページの作成
+
     const newPage = await ex.notion.pages.create({
-        parent: {
-          database_id: databaseId,
-        },
-        properties: {
-          名前: {
-            title: [
-              {
-                text: {
-                  content: pageTitle,
-                },
+      parent: {
+        database_id: databaseId,
+      },
+      properties: {
+        名前: {
+          title: [
+            {
+              text: {
+                content: pageTitle,
               },
-            ]
-          },
-          タグ: {
-            multi_select: [
-              {
-                name: pageNumber
-              },
-              {
-                name: pageTag
-              }
-            ]
-          }
+            },
+          ]
         },
-        children: pageScript,
+        タグ: {
+          multi_select: [
+            {
+              name: pageNumber
+            },
+            {
+              name: pageTag
+            }
+          ]
+        }
+      },
     });
     
+    for (var i = 0; i < pageScript.length / 100; i++){
+      //配列範囲
+      var pageScriptNew;
+      if (i === ~~(pageScript.length/100)) {
+        pageScriptNew = pageScript.slice(i*100, pageScript.length);
+      }
+      else {
+        pageScriptNew = pageScript.slice(i * 100, i * 100 + 100);
+      }
+      // ページにブロックの追加
+      await ex.notion.blocks.children.append({
+        block_id: newPage.id,
+        children: pageScriptNew
+      });
+    }
     console.log(`新しいページを作成しました: ${newPage.url}`);
   } catch (error) {
     console.error("エラー:", error);
