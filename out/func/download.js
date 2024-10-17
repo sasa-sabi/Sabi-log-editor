@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadImage = exports.downloadHtml = exports.downloadMarkdown = void 0;
+exports.moveImage = exports.uploadAndDeleteImage = exports.uploadImageFromPath = exports.downloadImage = exports.downloadHtml = exports.downloadMarkdown = void 0;
 const vscode = require("vscode");
 const axios_1 = require("axios");
 const cloudinary_1 = require("cloudinary");
+const fs = require("fs");
 const path = require("path");
 const ex = require("../extension");
 const nn = require("./notion");
@@ -39,15 +40,17 @@ const downloadHtml = async (artnumber, artdate, artbool) => {
     const editor = vscode.window.activeTextEditor;
     const filePath = vscode.workspace.workspaceFolders;
     var newfilePath = "";
+    var imageFolder = "";
     if (filePath && filePath.length > 0) {
         if (artbool) {
-            newfilePath = path.join(filePath[0].uri?.fsPath, "articles\\ho-0" + artnumber + ".html");
+            newfilePath = path.join(filePath[0].uri?.fsPath, "articles\\ho-" + cv.formatNumber(artnumber) + ".html");
+            imageFolder = "art-" + artnumber;
         }
         else {
-            newfilePath = path.join(filePath[0].uri?.fsPath, "ur\\ur-0" + artnumber + ".html");
+            newfilePath = path.join(filePath[0].uri?.fsPath, "ur\\ur-" + cv.formatNumber(artnumber) + ".html");
         }
     }
-    if (editor !== undefined) {
+    if (editor) {
         const arttext = editor.document.getText();
         const pages = arttext.split(/\-\-p/);
         const topwindow = pages[0].split(/\-\-\-/);
@@ -63,7 +66,7 @@ const downloadHtml = async (artnumber, artdate, artbool) => {
         for (var i = 0; i < pages.length; i++) {
             const pagenumber = "-" + `${i + 1}`;
             multipage = i;
-            const script = cv.makeDownloadFile(pages[i], i, pages.length, artnumber, pagenumber, headertitle, headersent, imageurl, archivesent, pages.length, pages[i + 1]);
+            const script = await cv.makeDownloadFile(pages[i], i, pages.length, artnumber, pagenumber, headertitle, headersent, imageurl, archivesent, pages.length, pages[i + 1], imageFolder);
             var newfilepath = "";
             if (pages.length > 1) {
                 newfilepath = newfilePath.replace(/\.html$/, pagenumber + ".html");
@@ -91,9 +94,8 @@ exports.downloadHtml = downloadHtml;
 const downloadArchive = async (artnumber, arttitle, arttag1, arttag2, artheader, uploaddate, multipage) => {
     const filePath = vscode.workspace.workspaceFolders;
     var newArticle = ex.archiveContent.split("sabilog_archiveTitle").join(arttitle);
+    newArticle = newArticle.split("sabilog_imageurl").join(artheader);
     newArticle = newArticle.split("sabilog_uploadDate").join(uploaddate);
-    newArticle = newArticle.split("sabilog_tag1").join(arttag1);
-    newArticle = newArticle.split("sabilog_tag2").join(arttag2);
     newArticle = newArticle.split("sabilog_num").join(artnumber);
     if (multipage === 0) {
         newArticle = newArticle.split("sabilog_multi").join("");
@@ -101,48 +103,74 @@ const downloadArchive = async (artnumber, arttitle, arttag1, arttag2, artheader,
     else {
         newArticle = newArticle.split("sabilog_multi").join("-1");
     }
-    for (var i = 0; i < 3; i++) {
-        var archive = "";
-        var article = newArticle;
-        if (filePath && filePath.length > 0) {
-            if (i === 0) {
-                archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, "archive.html"));
-                article = article
-                    .split("sabilog_tagurl1")
-                    .join("./" + dic.Archives[arttag1]);
-                article = article
-                    .split("sabilog_tagurl2")
-                    .join("./" + dic.Archives[arttag2]);
+    let repeatCount = (arttag2 === "none") ? 2 : 3;
+    for (var i = 0; i < repeatCount; i++) {
+        try {
+            var archive = "";
+            var article = newArticle;
+            if (filePath && filePath.length > 0) {
+                if (i === 0) {
+                    archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, "archive.html"));
+                    article = article
+                        .split("sabilog_buttonGroup1")
+                        .join(`<a type="button" class="tagg" href="./` + dic.Archives[arttag1] + `">` + arttag1 + `</a>`);
+                    if (arttag2 !== "none") {
+                        article = article
+                            .split("sabilog_buttonGroup2")
+                            .join(`<a type="button" class="tagg" href="./` + dic.Archives[arttag2] + `">` + arttag2 + `</a>`);
+                    }
+                    else {
+                        article = article
+                            .split("sabilog_buttonGroup2")
+                            .join("");
+                    }
+                }
+                else if (i === 1) {
+                    archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, dic.Archives[arttag1]));
+                    article = article
+                        .split("sabilog_buttonGroup1")
+                        .join(`<a type="button" class="tagg" href="#">` + arttag1 + `</a>`);
+                    if (arttag2 !== "none") {
+                        article = article
+                            .split("sabilog_buttonGroup2")
+                            .join(`<a type="button" class="tagg" href="./` + dic.Archives[arttag2] + `">` + arttag2 + `</a>`);
+                    }
+                    else {
+                        article = article
+                            .split("sabilog_buttonGroup2")
+                            .join("");
+                    }
+                }
+                else {
+                    archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, dic.Archives[arttag2]));
+                    article = article
+                        .split("sabilog_buttonGroup1")
+                        .join(`<a type="button" class="tagg" href="./` + dic.Archives[arttag1] + `">` + arttag1 + `</a>`);
+                    article = article
+                        .split("sabilog_tagurl2")
+                        .join(`<a type="button" class="tagg" href="#">` + arttag2 + `</a>`);
+                }
+                archive = archive.replace("<!--sabilog_newart-->", "<!--sabilog_newart-->\n\n" + article);
+                // テキストをUint8Arrayに変換
+                const blob = Buffer.from(archive);
+                var archiveName = "";
+                if (i === 0) {
+                    archiveName = "archive.html";
+                }
+                else if (i === 1) {
+                    archiveName = dic.Archives[arttag1];
+                }
+                else if (i === 2) {
+                    archiveName = dic.Archives[arttag2];
+                }
+                console.log(7);
+                console.log(filePath[0].uri?.fsPath, archiveName);
+                // ファイルへ書き込む
+                await vscode.workspace.fs.writeFile(vscode.Uri.file(path.join(filePath[0].uri?.fsPath, archiveName)), blob);
             }
-            else if (i === 1) {
-                archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, dic.Archives[arttag1]));
-                article = article.split("sabilog_tagurl1").join("#");
-                article = article
-                    .split("sabilog_tagurl2")
-                    .join("./" + dic.Archives[arttag2]);
-            }
-            else {
-                archive = ex.readStringFromFile(path.join(filePath[0].uri?.fsPath, dic.Archives[arttag2]));
-                article = article
-                    .split("sabilog_tagurl1")
-                    .join("./" + dic.Archives[arttag1]);
-                article = article.split("sabilog_tagurl2").join("#");
-            }
-            archive = archive.replace("<!--sabilog_newart-->", "<!--sabilog_newart-->\n\n" + article);
-            // テキストをUint8Arrayに変換
-            const blob = Buffer.from(archive);
-            var archiveName = "";
-            if (i === 0) {
-                archiveName = "archive.html";
-            }
-            else if (i === 1) {
-                archiveName = dic.Archives[arttag1];
-            }
-            else if (i === 2) {
-                archiveName = dic.Archives[arttag2];
-            }
-            // ファイルへ書き込む
-            await vscode.workspace.fs.writeFile(vscode.Uri.file(path.join(filePath[0].uri?.fsPath, archiveName)), blob);
+        }
+        catch (error) {
+            console.error("アーカイブの読み込みエラー:", error.message);
         }
     }
     csv.editAdmin(artnumber, arttitle, arttag1, arttag2, artheader);
@@ -176,4 +204,73 @@ async function downloadImage(imageUrl, folderName) {
 }
 exports.downloadImage = downloadImage;
 ;
+async function uploadImageFromPath(imagePath, folderName) {
+    try {
+        const imageData = fs.readFileSync(imagePath);
+        return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary_1.v2.uploader.upload_stream({
+                upload_preset: 'ml_default',
+                folder: folderName, // 任意のフォルダ名
+            }, (error, result) => {
+                if (error) {
+                    console.error('Cloudinary upload error:', error);
+                    reject(error);
+                }
+                else {
+                    if (result) {
+                        resolve(result.secure_url);
+                    }
+                }
+            });
+            uploadStream.end(imageData);
+        });
+    }
+    catch (error) {
+        console.error('Error:', error);
+        throw new Error('Failed to upload image');
+    }
+}
+exports.uploadImageFromPath = uploadImageFromPath;
+async function uploadAndDeleteImage(imagePath, folderName, lineNumber) {
+    try {
+        const imageUrl = await uploadImageFromPath(imagePath, folderName);
+        console.log(`Image uploaded to Cloudinary: ${imageUrl}`);
+        fs.unlinkSync(imagePath); // 画像ファイルを削除
+        cv.replaceImage(lineNumber, imageUrl);
+        return imageUrl;
+    }
+    catch (error) {
+        console.error('Error:', error);
+        throw new Error('Failed to upload image');
+    }
+}
+exports.uploadAndDeleteImage = uploadAndDeleteImage;
+function moveImage(imageUrl, destinationFolder, lineNumber) {
+    return new Promise((resolve, reject) => {
+        try {
+            const urlArray = imageUrl.split("/");
+            const sourcePath = urlArray.slice(-2).join("/").split(".")[0];
+            const destinationPath = destinationFolder + "/" + urlArray.slice(-1).join("").split(".")[0];
+            console.log(sourcePath, destinationPath);
+            // Perform the move
+            cloudinary_1.v2.uploader.rename(sourcePath, destinationPath)
+                .then((result) => {
+                console.log('Image moved successfully:', result.url);
+                const image_url = result.url.replace(/^http:\/\//, 'https://');
+                console.log(image_url);
+                cv.replaceImage(lineNumber, image_url);
+                resolve(image_url); // 成功時はresolveでURLを返す
+            })
+                .catch((error) => {
+                console.error('Error moving image:', error);
+                reject(error); // エラーが発生したらrejectでエラーを返す
+            });
+        }
+        catch (error) {
+            console.error('Error during the image move process:', error);
+            reject(error); // 例外が発生したらrejectでエラーを返す
+        }
+    });
+}
+exports.moveImage = moveImage;
 //# sourceMappingURL=download.js.map

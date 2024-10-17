@@ -1,10 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeUpdateFile = exports.makeDownloadFile = exports.makeDisplay = exports.convertMd = void 0;
+exports.replaceImage = exports.makeUpdateFile = exports.makeDownloadFile = exports.makeDisplay = exports.convertMd = exports.formatNumber = void 0;
+const vscode = require("vscode");
 const ex = require("../extension");
 const dic = require("../text/dictional");
+const dl = require("./download");
+// 番号を2桁に
+function formatNumber(number) {
+    return number < 10 ? `0${number}` : `${number}`;
+}
+exports.formatNumber = formatNumber;
 // Markdownのコンバート
-function convertMd(code) {
+async function convertMd(code, filePath, updateNumber, fileName) {
     // 正規表現パターンを定義
     var pattern_h1 = /^#\s+([\s\S]*?)$/;
     var pattern_h2 = /^##\s+([\s\S]*?)$/;
@@ -17,7 +24,9 @@ function convertMd(code) {
     var pattern_decomemo = /^\-mc([\s\S]*?)「([\s\S]*?)」$/;
     var pattern_memo = /^\-m([\s\S]*?)「([\s\S]*?)」$/;
     var pattern_baloon = /^\-t([\s\S]*?)「([\s\S]*?)」$/;
+    var pattern_image_a = /^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
     var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
+    const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
     const window_str = code.split("\n\n");
     var complish_str = "";
     let how_time_p = [];
@@ -130,11 +139,82 @@ function convertMd(code) {
                     "</strong></p>\n";
         }
         // 画像の変換
+        else if (pattern_image_a.test(window_str[k])) {
+            // ctrl+s以外→更新なし
+            if (updateNumber === 1) {
+                var match = pattern_image_a.exec(window_str[k]);
+                if (match !== null) {
+                    complish_str +=
+                        '\n\t\t<img alt="' + match[1] +
+                            '" class="art-image" />\n';
+                }
+            }
+            // ctrl+sのとき→art-draftに移す
+            else if (updateNumber === 2) {
+                var match = pattern_image_a.exec(window_str[k]);
+                if (match && line_serch) {
+                    var lineNumber = 0;
+                    for (let i = 0; i < line_serch.length; i++) {
+                        if (line_serch[i].includes(`(${match[2]})`)) {
+                            lineNumber = i;
+                        }
+                    }
+                    console.log(filePath + match[2]);
+                    dl.uploadAndDeleteImage(filePath + match[2], "art-draft", lineNumber)
+                        .then((secureUrl) => {
+                        complish_str += '\n\t\t<img src="' + secureUrl + '" class="art-image" />\n';
+                    })
+                        .catch((error) => {
+                        console.error("エラー:", error);
+                    });
+                }
+            }
+            // makeDownloadfile→Filenameに移す
+            else if (updateNumber === 3) {
+                var match = pattern_image_a.exec(window_str[k]);
+                if (match && line_serch) {
+                    var lineNumber = 0;
+                    for (let i = 0; i < line_serch.length; i++) {
+                        if (line_serch[i].includes(`(${match[2]})`)) {
+                            lineNumber = i;
+                        }
+                    }
+                    console.log(filePath + match[2]);
+                    dl.uploadAndDeleteImage(filePath + match[2], fileName, lineNumber)
+                        .then((secureUrl) => {
+                        complish_str += '\n\t\t<img src="' + secureUrl + '" class="art-image" />\n';
+                    })
+                        .catch((error) => {
+                        console.error("エラー:", error);
+                    });
+                }
+            }
+        }
         else if (pattern_image.test(window_str[k])) {
-            complish_str +=
-                '\n\t\t<img src="' +
-                    window_str[k].substring(1) +
-                    '" class="art-image" />\n';
+            var match = pattern_image.exec(window_str[k]);
+            // art-draftがついていて、makeDownloadfileのとき
+            if (match && match[0].includes("art-draft") && updateNumber === 3 && match && line_serch) {
+                var lineNumber = 0;
+                for (let i = 0; i < line_serch.length; i++) {
+                    if (line_serch[i].includes(`${match[0]}`)) {
+                        lineNumber = i;
+                        console.log(lineNumber);
+                    }
+                }
+                console.log(match[1], "⇒", fileName);
+                const upload_url = await dl.moveImage(match[1], fileName, lineNumber)
+                    .catch((error) => {
+                    console.error("エラー:", error);
+                });
+                complish_str += '\n\t\t<img src="' + upload_url + '" class="art-image" />\n';
+                console.log(complish_str);
+            }
+            else {
+                complish_str +=
+                    '\n\t\t<img src="' +
+                        window_str[k].substring(1) +
+                        '" class="art-image" />\n';
+            }
         }
         // 項目（- コンテンツ）の変換
         else if (pattern_content.test(window_str[k])) {
@@ -189,7 +269,7 @@ function convertMd(code) {
     return complish_str;
 }
 exports.convertMd = convertMd;
-function makeDisplay(mark) {
+async function makeDisplay(mark, filePath, updateNumber) {
     var convertedHtml = "";
     var markdown = mark.document.getText();
     const pages = markdown.split("--p");
@@ -214,25 +294,27 @@ function makeDisplay(mark) {
                     if (i === window.length - 1) {
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                                convertMd(window[1]) +
+                                await convertMd(window[1], filePath, updateNumber, "") +
                                 "\n\t\t</div>";
                     }
                     else {
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                                convertMd(window[1]) +
+                                await convertMd(window[1], filePath, updateNumber, "") +
                                 "\n\t\t</div>";
                     }
                 }
                 else if (i === window.length - 1) {
                     convertedHtml +=
                         '\n\t\t<div class="window window-end">\n\t\t' +
-                            convertMd(window[i]) +
+                            await convertMd(window[i], filePath, updateNumber, "") +
                             "\n\t\t</div>";
                 }
                 else {
                     convertedHtml +=
-                        '\n\t\t<div class="window">\n\t\t' + convertMd(window[i]) + "\n\t\t</div>";
+                        '\n\t\t<div class="window">\n\t\t' +
+                            await convertMd(window[i], filePath, updateNumber, "") +
+                            "\n\t\t</div>";
                 }
             }
         }
@@ -242,26 +324,26 @@ function makeDisplay(mark) {
                     if (i === window.length - 1) {
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                                convertMd(window[0]) +
+                                await convertMd(window[0], filePath, updateNumber, "") +
                                 "\n\t\t</div>";
                     }
                     else {
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                                convertMd(window[0]) +
+                                await convertMd(window[0], filePath, updateNumber, "") +
                                 "\n\t\t</div>";
                     }
                 }
                 else if (i === window.length - 1) {
                     convertedHtml +=
                         '\n\t\t<div class="window window-end">\n\t\t' +
-                            convertMd(window[i]) +
+                            await convertMd(window[i], filePath, updateNumber, "") +
                             "\n\t\t</div>";
                 }
                 else {
                     convertedHtml +=
                         '\n\t\t<div class="window">\n\t\t' +
-                            convertMd(window[i]) +
+                            await convertMd(window[i], filePath, updateNumber, "") +
                             "\n\t\t</div>";
                 }
             }
@@ -271,7 +353,7 @@ function makeDisplay(mark) {
     return convertedHtml;
 }
 exports.makeDisplay = makeDisplay;
-function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, headersent, imageurl, archivesent, maxpage, nextpages) {
+async function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, headersent, imageurl, archivesent, maxpage, nextpages, filepath) {
     var convertedHtml = "";
     var header = ex.headerContent.split("sabilog_title").join(headertitle);
     header = header.split("sabilog_sent").join(archivesent);
@@ -302,27 +384,27 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                     convertedHtml +=
                         '\n<div class="headline">' +
                             '\n\n\t<div class="top-window window-end">\n' +
-                            convertMd(window[1]) +
+                            await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) +
                             "\n\t</div>";
                 }
                 else {
                     convertedHtml +=
                         '\n<div class="headline">' +
                             '\n\n\t<div class="top-window">\n' +
-                            convertMd(window[1]) +
+                            await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) +
                             "\n\t</div>";
                 }
             }
             else if (i === window.length - 1) {
                 convertedHtml +=
                     '\n\t<div class="window window-end">\n' +
-                        convertMd(window[i]) +
+                        await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
                         "\n\t</div>";
             }
             else {
                 convertedHtml +=
                     '\n\t<div class="window">\n' +
-                        convertMd(window[i]) +
+                        await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
                         "\n\t</div>";
             }
         }
@@ -340,7 +422,7 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
             top_next = top_next.split("sabilog_nextinv").join("");
             top_next = top_next
                 .split("sabilog_nexturl")
-                .join('href="./ho-0' + `${artnum}` + "-" + `${k + 2}` + '.html"');
+                .join('href="./ho-' + `${formatNumber(artnum)}` + "-" + `${k + 2}` + '.html"');
             top_next = top_next.split("sabilog_prevnom").join(`${k}`);
             top_next = top_next.split("sabilog_nownom").join(`${k + 1}`);
             top_next = top_next.split("sabilog_nextnom").join(`${k + 2}`);
@@ -348,7 +430,7 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
             down_next = ex.downnextContent;
             down_next = down_next
                 .split("sabilog_nexturl")
-                .join("./ho-0" + `${artnum}` + "-" + `${k + 2}` + ".html");
+                .join("./ho-" + `${formatNumber(artnum)}` + "-" + `${k + 2}` + ".html");
             var nextpage_sp = nextpages.split("---");
             nextpage_sp = nextpage_sp[0].split("\n\n");
             var down_text_num = -1;
@@ -384,26 +466,26 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                     if (i === window.length - 1) {
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' + top_next + "\n\t\t" +
-                                convertMd(window[1]) + "\n\t\t" + down_next +
+                                await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) + "\n\t\t" + down_next +
                                 "\n\t\t</div>";
                     }
                     else {
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' + top_next +
-                                convertMd(window[1]) +
+                                await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) +
                                 "\n\t\t</div>";
                     }
                 }
                 else if (i === window.length - 1) {
                     convertedHtml +=
                         '\n\t\t<div class="window window-end">\n\t\t' +
-                            convertMd(window[i]) + "\n\t\t" + down_next +
+                            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) + "\n\t\t" + down_next +
                             "\n\t\t</div>";
                 }
                 else {
                     convertedHtml +=
                         '\n\t\t<div class="window">\n\t\t' +
-                            convertMd(window[i]) +
+                            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
                             "\n\t\t</div>";
                 }
             }
@@ -427,7 +509,7 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                 top_next = top_next.split("sabilog_previnv").join("");
                 top_next = top_next
                     .split("sabilog_prevurl")
-                    .join('href="./ho-0' + `${artnum}` + "-" + `${k - 1}` + '.html"');
+                    .join('href="./ho-' + `${formatNumber(artnum)}` + "-" + `${k - 1}` + '.html"');
                 if (k === maxpage - 1) {
                     top_next = top_next.split("sabilog_nextinv").join("page-inv");
                     top_next = top_next.split("sabilog_nexturl").join("");
@@ -436,7 +518,7 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                     top_next = top_next.split("sabilog_nextinv").join("");
                     top_next = top_next
                         .split("sabilog_nexturl")
-                        .join('href="./ho-0' + `${artnum}` + "-" + `${k + 2}` + '.html"');
+                        .join('href="./ho-' + `${formatNumber(artnum)}` + "-" + `${k + 2}` + '.html"');
                 }
                 top_next = top_next.split("sabilog_prevnom").join(`${k}`);
                 top_next = top_next.split("sabilog_nownom").join(`${k + 1}`);
@@ -446,7 +528,7 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                     down_next = ex.downnextContent;
                     down_next = down_next
                         .split("sabilog_nexturl")
-                        .join("./ho-0" + `${artnum}` + "-" + `${k + 2}` + ".html");
+                        .join("./ho-" + `${formatNumber(artnum)}` + "-" + `${k + 2}` + ".html");
                     var nextpage_sp = nextpages.split("---");
                     nextpage_sp = nextpage_sp[0].split("\n\n");
                     var down_text_num = -1;
@@ -470,7 +552,7 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
                                 top_next + "\n\t\t" +
-                                convertMd(window[0]) +
+                                await convertMd(window[0], filepath, 3, "art-" + `${artnum}`) +
                                 "\n\t\t" +
                                 down_next +
                                 "\n\t\t</div>";
@@ -479,14 +561,14 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                         convertedHtml +=
                             '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
                                 top_next + "\n" +
-                                convertMd(window[0]) +
+                                await convertMd(window[0], filepath, 3, "art-" + `${artnum}`) +
                                 "\n\t\t</div>";
                     }
                 }
                 else if (i === window.length - 1) {
                     convertedHtml +=
                         '\n\t\t<div class="window window-end">\n\t\t' +
-                            convertMd(window[i]) +
+                            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
                             "\n\t\t" +
                             down_next +
                             "\n\t\t</div>";
@@ -494,17 +576,18 @@ function makeDownloadFile(pages, k, pageKey, artnum, pagenum, headertitle, heade
                 else {
                     convertedHtml +=
                         '\n\t\t<div class="window">\n\t\t' +
-                            convertMd(window[i]) +
+                            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
                             "\n\t\t</div>";
                 }
             }
         }
+        console.log("finish");
         convertedHtml += "\n\t</div>";
     }
     return header + convertedHtml + ex.footerContent;
 }
 exports.makeDownloadFile = makeDownloadFile;
-function makeUpdateFile(mark) {
+function makeUpdateFile(mark, filePath) {
     // 正規表現パターンを定義
     var pattern_h1 = /^#\s+([\s\S]*?)$/;
     var pattern_h2 = /^##\s+([\s\S]*?)$/;
@@ -514,6 +597,7 @@ function makeUpdateFile(mark) {
     var pattern_link = /\[([\s\S]*?)\]\(([\s\S]*?)\)\s*/;
     var pattern_content = /^\-\s([\s\S]*?)$/;
     var pattern_code = /^```([\s\S]*?)\n([\s\S]*?)```$/m;
+    var pattern_image_a = /^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
     var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
     var pattern_label = /^\-p\s([\s\S]*?)$/;
     var pattern_baloon = /^\-t([\s\S]*?)「([\s\S]*?)」$/;
@@ -524,6 +608,7 @@ function makeUpdateFile(mark) {
     var pattern_sent = /^\-sent\s([\s\S]*?)$/;
     var pattern_separate = /^\-\-\-$/;
     var pattern_newline = /^([\s\S]*?)\n*$/;
+    const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
     const markdown = mark.document.getText();
     const pages = markdown.split("\n\n");
     var pagescript = [];
@@ -581,16 +666,46 @@ function makeUpdateFile(mark) {
             }
         }
         // 画像の変換
+        else if (pattern_image_a.test(pages[k])) {
+            var match = pattern_image_a.exec(pages[k]);
+            if (match && line_serch) {
+                var lineNumber = 0;
+                for (let i = 0; i < line_serch.length; i++) {
+                    if (line_serch[i].includes(`(${match[2]})`)) {
+                        lineNumber = i;
+                    }
+                }
+                console.log(filePath + match[2]);
+                dl.uploadAndDeleteImage(filePath + match[2], "art-draft", lineNumber)
+                    .then((secureUrl) => {
+                    pagescript.push({
+                        type: "image",
+                        image: {
+                            type: "external",
+                            external: {
+                                url: secureUrl,
+                            },
+                        },
+                    });
+                })
+                    .catch((error) => {
+                    console.error("エラー:", error);
+                });
+            }
+        }
         else if (pattern_image.test(pages[k])) {
-            pagescript.push({
-                type: "image",
-                image: {
-                    type: "external",
-                    external: {
-                        url: pages[k].substring(1),
+            var match = pattern_image.exec(pages[k]);
+            if (match) {
+                pagescript.push({
+                    type: "image",
+                    image: {
+                        type: "external",
+                        external: {
+                            url: match[0].substring(1),
+                        },
                     },
-                },
-            });
+                });
+            }
         }
         // 項目（- コンテンツ）の変換
         else if (pattern_content.test(pages[k])) {
@@ -714,12 +829,22 @@ function makeUpdateFile(mark) {
                                 });
                             }
                         }
+                        // 本文の変換
                         else {
-                            text.push({
-                                text: {
-                                    content: letters[i]
-                                }
-                            });
+                            if (i !== letters.length - 1) {
+                                text.push({
+                                    text: {
+                                        content: letters[i] + " "
+                                    }
+                                });
+                            }
+                            else {
+                                text.push({
+                                    text: {
+                                        content: letters[i]
+                                    }
+                                });
+                            }
                         }
                     }
                     pagescript.push({
@@ -735,4 +860,24 @@ function makeUpdateFile(mark) {
     return pagescript;
 }
 exports.makeUpdateFile = makeUpdateFile;
+async function replaceImage(lineNumber, url) {
+    let editor = vscode.window.activeTextEditor;
+    if (editor) {
+        const document = editor.document;
+        editor.edit(editBuilder => {
+            const line = document.lineAt(lineNumber);
+            const range = new vscode.Range(line.range.start, line.range.end);
+            editBuilder.delete(range);
+            editBuilder.insert(new vscode.Position(lineNumber, 0), "!" + url);
+        }).then(success => {
+            if (success) {
+                console.log(`Replaced ${url}`);
+            }
+            else {
+                console.error('Failed to replace line');
+            }
+        });
+    }
+}
+exports.replaceImage = replaceImage;
 //# sourceMappingURL=convert.js.map

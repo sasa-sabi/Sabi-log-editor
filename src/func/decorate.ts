@@ -168,7 +168,6 @@ export function updateDecorations(activeEditor: vscode.TextEditor){
   while (match = pageSeparate.exec(text)) {
     const startPos = activeEditor.document.positionAt(match.index);
     const endPos = activeEditor.document.positionAt(match.index + match[0].length);
-    console.log(startPos,endPos);
     const decoration = { range: new vscode.Range(startPos, endPos) };
     separateDecoration.push(decoration);
   }
@@ -176,7 +175,6 @@ export function updateDecorations(activeEditor: vscode.TextEditor){
   while (match = windowSeparate.exec(text)) {
     const startPos = activeEditor.document.positionAt(match.index);
     const endPos = activeEditor.document.positionAt(match.index + match[0].length);
-    console.log(startPos,endPos);
     const decoration = { range: new vscode.Range(startPos, endPos) };
     separateDecoration.push(decoration);
   }

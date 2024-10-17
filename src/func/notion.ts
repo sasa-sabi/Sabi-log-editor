@@ -1,4 +1,4 @@
-const dl=require("./download");
+const dl = require("./download");
 const ex = require("../extension");
 
 export const getDatabase = async (databaseId: string) => {
@@ -32,7 +32,7 @@ export const getBlock = async (pageId: string, nextCursor: string) => {
 export const pageIdDictionary: { [name: string]: string } = {};
 
 export const getPageTitle = async (databeseId: string) => {
-  const selectIDs:string[] = [];
+  const selectIDs: string[] = [];
   const selectTags: string[] = [];
   const database = await getDatabase(databeseId);
   for (var i = 0; i < database.results.length; i++) {
@@ -86,9 +86,9 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
             // 本文(ボールドイタリック)
             if (
               block.results[i].paragraph.rich_text[j].annotations.bold ===
-                true &&
+              true &&
               block.results[i].paragraph.rich_text[j].annotations.italic ===
-                true
+              true
             ) {
               pagetext +=
                 "***" +
@@ -194,9 +194,9 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
           if (selectHo) {
             // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
             await dl.downloadImage(
-                block.results[i].image.file.url,
-                "art-draft"
-              )
+              block.results[i].image.file.url,
+              "art-draft"
+            )
               .then((secureUrl: string) => {
                 pagetext += "!" + secureUrl + "\n\n";
               })
@@ -207,9 +207,9 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
           else {
             // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
             await dl.downloadImage(
-                block.results[i].image.file.url,
-                "art-draft"
-              )
+              block.results[i].image.file.url,
+              "art-draft"
+            )
               .then((secureUrl: string) => {
                 pagetext += "!" + secureUrl + "\n\n";
               })
@@ -226,6 +226,8 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
       else if (block.results[i].divider !== undefined) {
         pagetext += "---\n\n";
       }
+
+      console.log("next");
     }
 
     if (block.next_cursor === null) {
@@ -238,7 +240,7 @@ export const getPagetext = async (pageId: string, pagetitle: string, filenumber:
 };
 
 export const createNotionPage = async (
-  pageTitle:string,
+  pageTitle: string,
   pageScript: string[],
   pageNumber: string,
   pageNameHo: boolean,
@@ -259,6 +261,7 @@ export const createNotionPage = async (
 
     // 検索結果を確認
     const pages = serchResponse.results;
+    // console.log(pages);
     for (var i = 0; i < pages.length; i++) {
       const titleArray = pages[i].properties.名前.title;
       if (titleArray.length > 0 && titleArray[0].text.content === pageTitle) {
@@ -271,10 +274,10 @@ export const createNotionPage = async (
 
     var pageTag = "";
     if (pageNameHo) {
-      pageTag="art";
+      pageTag = "art";
     }
     else {
-      pageTag="ura";
+      pageTag = "ura";
     }
 
     const newPage = await ex.notion.pages.create({
@@ -303,12 +306,12 @@ export const createNotionPage = async (
         }
       },
     });
-    
-    for (var i = 0; i < pageScript.length / 100; i++){
+
+    for (var i = 0; i < pageScript.length / 100; i++) {
       //配列範囲
       var pageScriptNew;
-      if (i === ~~(pageScript.length/100)) {
-        pageScriptNew = pageScript.slice(i*100, pageScript.length);
+      if (i === ~~(pageScript.length / 100)) {
+        pageScriptNew = pageScript.slice(i * 100, pageScript.length);
       }
       else {
         pageScriptNew = pageScript.slice(i * 100, i * 100 + 100);

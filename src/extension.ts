@@ -11,14 +11,14 @@ const cv = require("./func/convert");
 const csv = require("./func/csv");
 const deco = require("./func/decorate");
 
-export const textpath = path.join(__dirname.replace("out","src"), "text\\");
+export const textpath = path.join(__dirname.replace("out", "src"), "text\\");
 
 // 外部テキストの読み取り
-export function readStringFromFile(filePath:string) {
+export function readStringFromFile(filePath: string) {
   try {
     const data = fs.readFileSync(filePath, "utf8");
     return data;
-  } catch (error:any) {
+  } catch (error: any) {
     console.error("ファイルの読み込みエラー:", error.message);
     return null;
   }
@@ -198,7 +198,7 @@ export function activate(context: vscode.ExtensionContext) {
   selectButton.command = "sabilog.savemd";
   context.subscriptions.push(selectButton);
   selectButton.show();
-  
+
   // 文字色の変更
   if (active_editor) {
     deco.updateDecorations(active_editor);
@@ -208,7 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
     (editor) => {
       active_editor = editor;
       if (editor) {
-        deco.triggerUpdateDecorations(false,active_editor);
+        deco.triggerUpdateDecorations(false, active_editor);
       }
     },
     null,
@@ -218,7 +218,7 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.workspace.onDidChangeTextDocument(
     (event) => {
       if (active_editor && event.document === active_editor.document) {
-        deco.triggerUpdateDecorations(true,active_editor);
+        deco.triggerUpdateDecorations(true, active_editor);
       }
     },
     null,
@@ -230,7 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("sabilog.savemd", async () => {
       var selectedho: boolean = false;
       const selectedUra = await vscode.window.showQuickPick(
-        ["article","inside"],
+        ["article", "inside"],
         { placeHolder: "Choose an option.", }
       );
       if (selectedUra) {
@@ -281,10 +281,11 @@ export function activate(context: vscode.ExtensionContext) {
                 if (match) {
                   const artNumber = parseInt(match[1]);
                   if (artNumber > maxArtNumber) {
-                    maxArtNumber = artNumber + 1;
+                    maxArtNumber = artNumber;
                   }
                 }
               });
+              maxArtNumber += 1;
             }
             else {
               files.forEach((file: string) => {
@@ -292,10 +293,11 @@ export function activate(context: vscode.ExtensionContext) {
                 if (match) {
                   const artNumber = parseInt(match[1]);
                   if (artNumber > maxArtNumber) {
-                    maxArtNumber = artNumber + 1;
+                    maxArtNumber = artNumber;
                   }
                 }
               });
+              maxArtNumber += 1;
             }
           }
           console.log(selectpageId, selecttitle, maxArtNumber, selectedho);
@@ -319,7 +321,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (filePath && filePath.length > 0) {
           newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\");
         }
-        
+
         const panel = vscode.window.createWebviewPanel(
           "markdown editor",
           "MARKS EDITOR",
@@ -329,15 +331,15 @@ export function activate(context: vscode.ExtensionContext) {
           }
         );
 
-        const updateWebview = () => {
+        const updateWebview = async () => {
           if (active_editor !== undefined) {
-            panel.webview.html = getWebviewContent(cv.makeDisplay(active_editor,newfilePath,1));
+            panel.webview.html = getWebviewContent(await cv.makeDisplay(active_editor, newfilePath, 1));
           }
         };
 
-        const updateWebviewAndImage = () => {
+        const updateWebviewAndImage = async () => {
           if (active_editor !== undefined) {
-            panel.webview.html = getWebviewContent(cv.makeDisplay(active_editor,newfilePath,2));
+            panel.webview.html = getWebviewContent(await cv.makeDisplay(active_editor, newfilePath, 2));
           }
         };
 
@@ -348,48 +350,48 @@ export function activate(context: vscode.ExtensionContext) {
         else {
           //テキストの変更
           vscode.workspace.onDidChangeTextDocument(event => {
-            if (active_editor && event.document === active_editor.document){
+            if (active_editor && event.document === active_editor.document) {
               updateWebview();
             }
           });
-          
+
           // セーブ
-          vscode.workspace.onDidSaveTextDocument( event => {
-            if (active_editor && event === active_editor.document){
+          vscode.workspace.onDidSaveTextDocument(event => {
+            if (active_editor && event === active_editor.document) {
               updateWebviewAndImage();
             }
           });
 
           // タブの変更
           vscode.window.onDidChangeActiveTextEditor(event => {
-            if (active_editor && event?.document === active_editor.document){
+            if (active_editor && event?.document === active_editor.document) {
               updateWebview();
             }
           });
 
           // テキストのスクロールを同期
           if (synchronousScroll === "true" || synchronousScroll === "True") {
-            vscode.window.onDidChangeTextEditorSelection( event => {
-                if (event.textEditor.document.languageId === "markdown") {
-                  const firstVisibleScreenRow = getTopVisibleLine(event.textEditor);
-                  const lastVisibleScreenRow = getBottomVisibleLine(event.textEditor);
-                  console.log(firstVisibleScreenRow,lastVisibleScreenRow);
-                  if (firstVisibleScreenRow !== undefined && lastVisibleScreenRow !== undefined) {
-                    if (active_editor !== undefined) {
-                      const fileLength = active_editor.document.lineCount;
-                      const topRatio =
-                        (event.selections[0].active.line - firstVisibleScreenRow) /
-                        (lastVisibleScreenRow - firstVisibleScreenRow);
-                      const ratio = event.selections[0].active.line / fileLength;
-                      console.log(topRatio);
-                      panel.webview.postMessage({
-                            command: 'scroll',
-                            scrollYPercentage: ratio
-                        });
-                    }
+            vscode.window.onDidChangeTextEditorSelection(event => {
+              if (event.textEditor.document.languageId === "markdown") {
+                const firstVisibleScreenRow = getTopVisibleLine(event.textEditor);
+                const lastVisibleScreenRow = getBottomVisibleLine(event.textEditor);
+                console.log(firstVisibleScreenRow, lastVisibleScreenRow);
+                if (firstVisibleScreenRow !== undefined && lastVisibleScreenRow !== undefined) {
+                  if (active_editor !== undefined) {
+                    const fileLength = active_editor.document.lineCount;
+                    const topRatio =
+                      (event.selections[0].active.line - firstVisibleScreenRow) /
+                      (lastVisibleScreenRow - firstVisibleScreenRow);
+                    const ratio = event.selections[0].active.line / fileLength;
+                    console.log(topRatio);
+                    panel.webview.postMessage({
+                      command: 'scroll',
+                      scrollYPercentage: ratio
+                    });
                   }
                 }
               }
+            }
             );
           }
         }
@@ -405,7 +407,7 @@ export function activate(context: vscode.ExtensionContext) {
       // ファイル名の取得
       const file_name_ar = active_editor?.document.fileName.split("\\");
       if (file_name_ar) {
-        const file_name_num = file_name_ar.length-1;
+        const file_name_num = file_name_ar.length - 1;
         const file_name = file_name_ar[file_name_num];
 
         // artかurかの判別
@@ -495,10 +497,10 @@ export function activate(context: vscode.ExtensionContext) {
       if (filePath && filePath.length > 0) {
         newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\");
       }
-      
+
       const file_name_ar = active_editor?.document.fileName.split("\\");
       if (file_name_ar) {
-        const file_name_num = file_name_ar.length-1;
+        const file_name_num = file_name_ar.length - 1;
         const file_name = file_name_ar[file_name_num];
 
         var pattern_art = /^art\-([\s\S]*?)/;
@@ -510,7 +512,7 @@ export function activate(context: vscode.ExtensionContext) {
           file_ho = false;
         }
 
-        var pattern_title=/^#\s+([\s\S]*?)$/;
+        var pattern_title = /^#\s+([\s\S]*?)$/;
         if (active_editor) {
           const pagetitle = active_editor.document.getText().split("\n")[0];
           var match = pattern_title.exec(pagetitle);
@@ -525,13 +527,30 @@ export function activate(context: vscode.ExtensionContext) {
   // デバッグ用
   context.subscriptions.push(
     vscode.commands.registerCommand("sabilog.debug", async () => {
-      console.log(active_editor?.document.fileName.split("\\"));
-      const file_name_ar = active_editor?.document.fileName.split("\\");
-      if (file_name_ar) {
-        const file_name_num = file_name_ar.length;
-        console.log(file_name_ar);
-        const file_name = file_name_ar[7];
-        console.log(file_name);
+      /*
+      csv.findNumberByTitle("素晴らしきボドゲ回");
+      csv.updateAdmin("10", "aaa", "a", "bbb", "b");
+      dl.moveImage(
+        "https://res.cloudinary.com/dtifkcohv/image/upload/v1718080339/art-draft/file_x2vko2.jpg",
+        "art-9"
+      );
+      // */
+
+      const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
+      var lineNumber = 1;
+      var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
+      if (line_serch) {
+        for (var i = 0; i < line_serch?.length; i++) {
+          var match = pattern_image.exec(line_serch[i]);
+          if (match) {
+            console.log("get");
+            console.log(match);
+            if (line_serch[i].includes(`https://res.cloudinary.com/dtifkcohv/image/upload/v1718080419/art-draft/file_fuzky8.jpg`)) {
+              lineNumber += i;
+              console.log(lineNumber + "update");
+            }
+          }
+        }
       }
     })
   );

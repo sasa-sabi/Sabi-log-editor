@@ -2,6 +2,7 @@ const ex = require("../extension");
 const fs = require("fs");
 
 export function getAdmin() {
+  console.log(ex.textpath+"admin.csv");
   const adminContent = ex.readStringFromFile(ex.textpath+"admin.csv");
 
   // バイナリデータを文字列に変換
@@ -69,4 +70,32 @@ export function editAdminUr(
 
   const newcsvContent = newContent + "\n" + addContent;
   fs.writeFileSync(ex.textpath + "admin_ur.csv", newcsvContent, "utf-8");
+}
+
+export function findNumberByTitle(title: string): string | null {
+  const Admin = getAdmin();
+
+  for (let i = 1; i < Admin.length; i++) {
+    const [, Number, Title, , , ] = Admin[i].split(",");
+    if (Title === title) {
+      console.log(Number);
+      return Number;
+    }
+  }
+
+  return null;
+}
+
+export function updateAdmin(number: string, title: string, tag1: string, tag2: string, header: string) {
+  const Admin = getAdmin();
+
+  if (Admin.length > parseInt(number)) {
+    const [, Number, , , ,] = Admin[parseInt(number)].split(",");
+    if (Number === number) {
+      Admin[parseInt(number)] = ["", number, title, tag1, tag2, header].join(",");
+    }
+  }
+
+  const updatedcsvContent = Admin.join("\n");
+  fs.writeFileSync(ex.textpath + "admin.csv", updatedcsvContent, "utf-8");
 }

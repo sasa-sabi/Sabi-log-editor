@@ -11,6 +11,7 @@ const getDatabase = async (databaseId) => {
             timestamp: "last_edited_time",
         },
     });
+    console.log(response);
     return response;
 };
 exports.getDatabase = getDatabase;
@@ -33,14 +34,25 @@ const getBlock = async (pageId, nextCursor) => {
 exports.getBlock = getBlock;
 exports.pageIdDictionary = {};
 const getPageTitle = async (databeseId) => {
-    var selectIDs = [];
+    const selectIDs = [];
+    const selectTags = [];
     const database = await (0, exports.getDatabase)(databeseId);
     for (var i = 0; i < database.results.length; i++) {
         const pagetitle = database.results[i].properties.名前.title[0].text.content;
-        exports.pageIdDictionary[pagetitle] = database.results[i].id.trim();
-        selectIDs.push(pagetitle);
+        try {
+            const pagetag = database.results[i].properties.タグ.multi_select[0].name;
+            exports.pageIdDictionary[pagetitle] = database.results[i].id.trim();
+            selectIDs.push(pagetitle);
+            selectTags.push(pagetag);
+        }
+        catch {
+            exports.pageIdDictionary[pagetitle] = database.results[i].id.trim();
+            selectIDs.push(pagetitle);
+            selectTags.push("none");
+        }
     }
-    return selectIDs;
+    console.log(selectIDs);
+    return [selectIDs, selectTags];
 };
 exports.getPageTitle = getPageTitle;
 const getPagetext = async (pageId, pagetitle, filenumber, selectHo) => {
@@ -113,10 +125,11 @@ const getPagetext = async (pageId, pagetitle, filenumber, selectHo) => {
                                 text = text.split("<").join("&lt;");
                                 text = text.split(">").join("&gt;");
                                 text = text.split("—p").join("\-\-p");
+                                pagetext += text;
                             }
                         }
                     }
-                    pagetext += text + "\n\n";
+                    pagetext += "\n\n";
                 }
             }
             // - リスト(has children)
@@ -157,7 +170,7 @@ const getPagetext = async (pageId, pagetitle, filenumber, selectHo) => {
                 if (block.results[i].image.type === "file") {
                     if (selectHo) {
                         // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
-                        await dl.downloadImage(block.results[i].image.file.url, "art-" + filenumber)
+                        await dl.downloadImage(block.results[i].image.file.url, "art-draft")
                             .then((secureUrl) => {
                             pagetext += "!" + secureUrl + "\n\n";
                         })
@@ -167,7 +180,7 @@ const getPagetext = async (pageId, pagetitle, filenumber, selectHo) => {
                     }
                     else {
                         // notionで画像をダウンロード→cloudinaryにアップロード→urlを取得
-                        await dl.downloadImage(block.results[i].image.file.url, "ur-" + filenumber)
+                        await dl.downloadImage(block.results[i].image.file.url, "art-draft")
                             .then((secureUrl) => {
                             pagetext += "!" + secureUrl + "\n\n";
                         })
@@ -184,6 +197,7 @@ const getPagetext = async (pageId, pagetitle, filenumber, selectHo) => {
             else if (block.results[i].divider !== undefined) {
                 pagetext += "---\n\n";
             }
+            console.log("next");
         }
         if (block.next_cursor === null) {
             key += 1;
@@ -199,20 +213,24 @@ const createNotionPage = async (pageTitle, pageScript, pageNumber, pageNameHo) =
     const databaseId = ex.notionDatabaseID.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5");
     try {
         // ページを検索
-        const searchResults = await ex.notion.search({
+        const serchResponse = await ex.notion.search({
             query: pageTitle,
             filter: {
                 value: "page",
                 property: "object",
             },
         });
-        // ページの削除
-        if (searchResults.results.length > 0) {
-            const pageId = searchResults.results[0].id;
-            const response = await ex.notion.pages.update({
-                page_id: pageId,
-                archived: true,
-            });
+        // 検索結果を確認
+        const pages = serchResponse.results;
+        // console.log(pages);
+        for (var i = 0; i < pages.length; i++) {
+            const titleArray = pages[i].properties.名前.title;
+            if (titleArray.length > 0 && titleArray[0].text.content === pageTitle) {
+                const response = await ex.notion.pages.update({
+                    page_id: pages[i].id,
+                    archived: true,
+                });
+            }
         }
         var pageTag = "";
         if (pageNameHo) {
@@ -221,7 +239,6 @@ const createNotionPage = async (pageTitle, pageScript, pageNumber, pageNameHo) =
         else {
             pageTag = "ura";
         }
-        // ページの作成
         const newPage = await ex.notion.pages.create({
             parent: {
                 database_id: databaseId,
@@ -247,8 +264,22 @@ const createNotionPage = async (pageTitle, pageScript, pageNumber, pageNameHo) =
                     ]
                 }
             },
-            children: pageScript,
         });
+        for (var i = 0; i < pageScript.length / 100; i++) {
+            //配列範囲
+            var pageScriptNew;
+            if (i === ~~(pageScript.length / 100)) {
+                pageScriptNew = pageScript.slice(i * 100, pageScript.length);
+            }
+            else {
+                pageScriptNew = pageScript.slice(i * 100, i * 100 + 100);
+            }
+            // ページにブロックの追加
+            await ex.notion.blocks.children.append({
+                block_id: newPage.id,
+                children: pageScriptNew
+            });
+        }
         console.log(`新しいページを作成しました: ${newPage.url}`);
     }
     catch (error) {

@@ -18,8 +18,7 @@ exports.Archives = {
     旅行: "tour_archive.html",
     長編: "long_archive.html",
     身内: "family_archive.html",
-    ゲーム: "game_archive.html",
-    none: ""
+    ゲーム: "game_archive.html"
 };
 exports.setting = {
     特定の文字列1: "#FF0000",

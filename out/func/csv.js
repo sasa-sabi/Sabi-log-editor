@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.editAdminUr = exports.editAdmin = exports.getAdminUr = exports.getAdmin = void 0;
+exports.updateAdmin = exports.findNumberByTitle = exports.editAdminUr = exports.editAdmin = exports.getAdminUr = exports.getAdmin = void 0;
 const ex = require("../extension");
 const fs = require("fs");
 function getAdmin() {
+    console.log(ex.textpath + "admin.csv");
     const adminContent = ex.readStringFromFile(ex.textpath + "admin.csv");
     // バイナリデータを文字列に変換
     const csvText = Buffer.from(adminContent).toString("utf-8");
@@ -51,4 +52,28 @@ function editAdminUr(archivenum, arttitle, artheader) {
     fs.writeFileSync(ex.textpath + "admin_ur.csv", newcsvContent, "utf-8");
 }
 exports.editAdminUr = editAdminUr;
+function findNumberByTitle(title) {
+    const Admin = getAdmin();
+    for (let i = 1; i < Admin.length; i++) {
+        const [, Number, Title, , ,] = Admin[i].split(",");
+        if (Title === title) {
+            console.log(Number);
+            return Number;
+        }
+    }
+    return null;
+}
+exports.findNumberByTitle = findNumberByTitle;
+function updateAdmin(number, title, tag1, tag2, header) {
+    const Admin = getAdmin();
+    if (Admin.length > parseInt(number)) {
+        const [, Number, , , ,] = Admin[parseInt(number)].split(",");
+        if (Number === number) {
+            Admin[parseInt(number)] = ["", number, title, tag1, tag2, header].join(",");
+        }
+    }
+    const updatedcsvContent = Admin.join("\n");
+    fs.writeFileSync(ex.textpath + "admin.csv", updatedcsvContent, "utf-8");
+}
+exports.updateAdmin = updateAdmin;
 //# sourceMappingURL=csv.js.map

@@ -2,6 +2,8 @@
 
 ## Introduction
 
+このエディターはsabilog.netと同一の形式のhtmlファイルを作成することができます。
+
 This editor can make html file in sabi-log.net format.
 
 ## Setting

@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deactivate = exports.activate = exports.notion = exports.synchronousScroll = exports.updateTickTime = exports.webviewUpdateOverTime = exports.cloudSecretKey = exports.cloudApiKey = exports.cloudName = exports.notionDatabaseID = exports.notionToken = exports.downnextContent = exports.topnextContent = exports.funcContent = exports.archiveContent = exports.footerContent = exports.topIconContent = exports.headerContent = exports.cssContent = exports.readAPIpass = exports.readStringFromFile = exports.textpath = void 0;
+exports.deactivate = exports.activate = exports.notion = exports.synchronousScroll = exports.updateTickTime = exports.webviewUpdateOverTime = exports.cloudSecretKey = exports.cloudApiKey = exports.cloudName = exports.notionDatabaseID = exports.notionToken = exports.downnextContent = exports.topnextContent = exports.funcContent = exports.archiveContent = exports.footerContent = exports.topIconContent = exports.headerContent = exports.cssContent = exports.readStringFromFile = exports.textpath = void 0;
 const vscode = require("vscode");
 const client_1 = require("@notionhq/client");
 const cloudinary_1 = require("cloudinary");
+const dotenv_1 = require("dotenv");
 const fs = require("fs");
 const path = require("path");
 const nn = require("./func/notion");
@@ -25,49 +26,8 @@ function readStringFromFile(filePath) {
 }
 exports.readStringFromFile = readStringFromFile;
 // envファイルの読み取り
-function readAPIpass(filePath, key) {
-    try {
-        const data = fs.readFileSync(exports.textpath + filePath, "utf8");
-        if (key === 0) {
-            const notionTokenMatch = data.match(/notionToken*=*"([^"]+)"/);
-            return notionTokenMatch[1];
-        }
-        else if (key === 1) {
-            const notionDatabaseIDMatch = data.match(/notionDatabaseID*=*"([^"]+)"/);
-            return notionDatabaseIDMatch[1];
-        }
-        else if (key === 2) {
-            const cloudNameMatch = data.match(/cloudName*=*"([^"]+)"/);
-            return cloudNameMatch[1];
-        }
-        else if (key === 3) {
-            const cloudApiKeyMatch = data.match(/cloudApiKey*=*"([^"]+)"/);
-            return cloudApiKeyMatch[1];
-        }
-        else if (key === 4) {
-            const cloudSecretKeyMatch = data.match(/cloudSecretKey*=*"([^"]+)"/);
-            return cloudSecretKeyMatch[1];
-        }
-        else if (key === 5) {
-            const webviewUpdateOverTimeMatch = data.match(/webviewUpdateOverTime*=*"([^"]+)"/);
-            return webviewUpdateOverTimeMatch[1];
-        }
-        else if (key === 6) {
-            const updateTickTimeMatch = data.match(/updateTickTime*=*"([^"]+)"/);
-            return updateTickTimeMatch[1];
-        }
-        // 試験的実装
-        else if (key === 101) {
-            const synchronousScrollMatch = data.match(/synchronousScroll*=*"([^"]+)"/);
-            return synchronousScrollMatch[1];
-        }
-    }
-    catch (error) {
-        console.error("ファイルの読み込みエラー:", error.message);
-        return null;
-    }
-}
-exports.readAPIpass = readAPIpass;
+const envPath = path.join(__dirname, '../.env');
+(0, dotenv_1.config)({ path: envPath });
 // 外部テキスト、envファイルの設定
 exports.cssContent = '<style type="text/css">' + readStringFromFile(exports.textpath + "style.css") + "</style>";
 exports.headerContent = readStringFromFile(exports.textpath + "header.html");
@@ -77,14 +37,14 @@ exports.archiveContent = readStringFromFile(exports.textpath + "archive.html");
 exports.funcContent = readStringFromFile(exports.textpath + "func.html");
 exports.topnextContent = readStringFromFile(exports.textpath + "top_next.html");
 exports.downnextContent = readStringFromFile(exports.textpath + "down_next.html");
-exports.notionToken = readAPIpass(".env", 0);
-exports.notionDatabaseID = readAPIpass(".env", 1);
-exports.cloudName = readAPIpass(".env", 2);
-exports.cloudApiKey = readAPIpass(".env", 3);
-exports.cloudSecretKey = readAPIpass(".env", 4);
-exports.webviewUpdateOverTime = readAPIpass(".env", 5);
-exports.updateTickTime = readAPIpass(".env", 6);
-exports.synchronousScroll = readAPIpass(".env", 101);
+exports.notionToken = process.env.notion_token;
+exports.notionDatabaseID = process.env.notion_database_ID;
+exports.cloudName = process.env.cloud_name;
+exports.cloudApiKey = process.env.cloud_api_key;
+exports.cloudSecretKey = process.env.cloud_secret_key;
+exports.webviewUpdateOverTime = process.env.webview_update_overtime;
+exports.updateTickTime = Number(process.env.update_tick_time);
+exports.synchronousScroll = process.env.synchronous_scroll;
 // トークン読み込み
 exports.notion = new client_1.Client({ auth: exports.notionToken, });
 cloudinary_1.v2.config({
@@ -232,12 +192,13 @@ function activate(context) {
                 selectedho = true;
             }
         }
-        const selectTitle = await nn.getPageTitle(exports.notionDatabaseID);
+        const [selectTitle, selectTag] = await nn.getPageTitle(exports.notionDatabaseID);
         const selectedOption = await vscode.window.showQuickPick(selectTitle, {
             placeHolder: "Choose an option.",
         });
         if (selectedOption) {
             const selecttitle = selectedOption;
+            const selecttag = selectTag[selectTitle.indexOf(selectedOption)];
             const selectpageId = nn.pageIdDictionary[selecttitle];
             try {
                 // ファイルパスの準備
@@ -248,30 +209,49 @@ function activate(context) {
                 }
                 // フォルダ内のファイルを取得
                 const files = fs.readdirSync(newfilePath);
-                let maxArtNumber = 0;
-                if (selectedho) {
-                    files.forEach((file) => {
-                        const match = /^art-(\d+)\.md$/.exec(file);
+                let maxArtNumber = 1;
+                if (selecttag !== "none") {
+                    if (selectedho) {
+                        var match = /art\-([\s\S]*?)\.md/.exec(selecttag);
                         if (match) {
-                            const artNumber = parseInt(match[1]);
-                            if (artNumber > maxArtNumber) {
-                                maxArtNumber = artNumber;
-                            }
+                            maxArtNumber = Number(match[1]);
                         }
-                    });
+                    }
+                    else {
+                        var match = /ho\-([\s\S]*?)\.md/.exec(selecttag);
+                        if (match) {
+                            maxArtNumber = Number(match[1]);
+                        }
+                    }
                 }
                 else {
-                    files.forEach((file) => {
-                        const match = /^ur-(\d+)\.md$/.exec(file);
-                        if (match) {
-                            const artNumber = parseInt(match[1]);
-                            if (artNumber > maxArtNumber) {
-                                maxArtNumber = artNumber;
+                    if (selectedho) {
+                        files.forEach((file) => {
+                            const match = /^art-(\d+)\.md$/.exec(file);
+                            if (match) {
+                                const artNumber = parseInt(match[1]);
+                                if (artNumber > maxArtNumber) {
+                                    maxArtNumber = artNumber;
+                                }
                             }
-                        }
-                    });
+                        });
+                        maxArtNumber += 1;
+                    }
+                    else {
+                        files.forEach((file) => {
+                            const match = /^ur-(\d+)\.md$/.exec(file);
+                            if (match) {
+                                const artNumber = parseInt(match[1]);
+                                if (artNumber > maxArtNumber) {
+                                    maxArtNumber = artNumber;
+                                }
+                            }
+                        });
+                        maxArtNumber += 1;
+                    }
                 }
-                dl.downloadMarkdown(selectpageId, selecttitle, maxArtNumber + 1, selectedho);
+                console.log(selectpageId, selecttitle, maxArtNumber, selectedho);
+                dl.downloadMarkdown(selectpageId, selecttitle, maxArtNumber, selectedho);
             }
             catch (error) {
                 dl.downloadMarkdown(selectpageId, selecttitle, 1);
@@ -282,12 +262,23 @@ function activate(context) {
     context.subscriptions.push(vscode.commands.registerCommand("sabilog.viewmd", () => {
         const columnToShowIn = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
         if (columnToShowIn) {
+            // ファイルパスの準備
+            const filePath = vscode.workspace.workspaceFolders;
+            var newfilePath = "";
+            if (filePath && filePath.length > 0) {
+                newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\");
+            }
             const panel = vscode.window.createWebviewPanel("markdown editor", "MARKS EDITOR", columnToShowIn + 1, {
                 enableScripts: true
             });
-            const updateWebview = () => {
+            const updateWebview = async () => {
                 if (active_editor !== undefined) {
-                    panel.webview.html = getWebviewContent(cv.makeDisplay(active_editor));
+                    panel.webview.html = getWebviewContent(await cv.makeDisplay(active_editor, newfilePath, 1));
+                }
+            };
+            const updateWebviewAndImage = async () => {
+                if (active_editor !== undefined) {
+                    panel.webview.html = getWebviewContent(await cv.makeDisplay(active_editor, newfilePath, 2));
                 }
             };
             if (exports.webviewUpdateOverTime === "true" || exports.webviewUpdateOverTime === "True") {
@@ -295,19 +286,19 @@ function activate(context) {
                 setInterval(updateWebview, exports.updateTickTime);
             }
             else {
-                // テキストが変更されたら更新
+                //テキストの変更
                 vscode.workspace.onDidChangeTextDocument(event => {
                     if (active_editor && event.document === active_editor.document) {
                         updateWebview();
                     }
                 });
-                // テキストがセーブされたら更新
+                // セーブ
                 vscode.workspace.onDidSaveTextDocument(event => {
                     if (active_editor && event === active_editor.document) {
-                        updateWebview();
+                        updateWebviewAndImage();
                     }
                 });
-                // タブを変更されたら更新
+                // タブの変更
                 vscode.window.onDidChangeActiveTextEditor(event => {
                     if (active_editor && event?.document === active_editor.document) {
                         updateWebview();
@@ -417,6 +408,12 @@ function activate(context) {
     }));
     // Markdownのアップデート
     context.subscriptions.push(vscode.commands.registerCommand("sabilog.updatemd", async () => {
+        // ファイルパスの準備
+        const filePath = vscode.workspace.workspaceFolders;
+        var newfilePath = "";
+        if (filePath && filePath.length > 0) {
+            newfilePath = path.join(filePath[0].uri?.fsPath, "article_draft\\");
+        }
         const file_name_ar = active_editor?.document.fileName.split("\\");
         if (file_name_ar) {
             const file_name_num = file_name_ar.length - 1;
@@ -434,20 +431,36 @@ function activate(context) {
                 const pagetitle = active_editor.document.getText().split("\n")[0];
                 var match = pattern_title.exec(pagetitle);
                 if (match) {
-                    nn.createNotionPage(match[1], cv.makeUpdateFile(active_editor), file_name, file_ho);
+                    nn.createNotionPage(match[1], cv.makeUpdateFile(active_editor, newfilePath), file_name, file_ho);
                 }
             }
         }
     }));
     // デバッグ用
     context.subscriptions.push(vscode.commands.registerCommand("sabilog.debug", async () => {
-        console.log(active_editor?.document.fileName.split("\\"));
-        const file_name_ar = active_editor?.document.fileName.split("\\");
-        if (file_name_ar) {
-            const file_name_num = file_name_ar.length;
-            console.log(file_name_ar);
-            const file_name = file_name_ar[7];
-            console.log(file_name);
+        /*
+        csv.findNumberByTitle("素晴らしきボドゲ回");
+        csv.updateAdmin("10", "aaa", "a", "bbb", "b");
+        dl.moveImage(
+          "https://res.cloudinary.com/dtifkcohv/image/upload/v1718080339/art-draft/file_x2vko2.jpg",
+          "art-9"
+        );
+        // */
+        const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
+        var lineNumber = 1;
+        var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
+        if (line_serch) {
+            for (var i = 0; i < line_serch?.length; i++) {
+                var match = pattern_image.exec(line_serch[i]);
+                if (match) {
+                    console.log("get");
+                    console.log(match);
+                    if (line_serch[i].includes(`https://res.cloudinary.com/dtifkcohv/image/upload/v1718080419/art-draft/file_fuzky8.jpg`)) {
+                        lineNumber += i;
+                        console.log(lineNumber + "update");
+                    }
+                }
+            }
         }
     }));
 }

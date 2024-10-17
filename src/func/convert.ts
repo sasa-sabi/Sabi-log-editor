@@ -4,21 +4,26 @@ const ex = require("../extension");
 const dic = require("../text/dictional");
 const dl = require("./download");
 
+// 番号を2桁に
+export function formatNumber(number: number): string {
+  return number < 10 ? `0${number}` : `${number}`;
+}
+
 // Markdownのコンバート
-export function convertMd(code: string, filePath: string, updateNumber: number) {
+export async function convertMd(code: string, filePath: string, updateNumber: number, fileName: string) {
   // 正規表現パターンを定義
   var pattern_h1 = /^#\s+([\s\S]*?)$/;
   var pattern_h2 = /^##\s+([\s\S]*?)$/;
-  var pattern_label =/^\-p\s+([\s\S]*?)$/;
-  var pattern_bold =/\*\*([\s\S]*?)\*\*\s*/g;
-  var pattern_italic =/\*([\s\S]*?)\*\s*/g;
-  var pattern_link =/\[([\s\S]*?)\]\(([\s\S]*?)\)\s*/g;
+  var pattern_label = /^\-p\s+([\s\S]*?)$/;
+  var pattern_bold = /\*\*([\s\S]*?)\*\*\s*/g;
+  var pattern_italic = /\*([\s\S]*?)\*\s*/g;
+  var pattern_link = /\[([\s\S]*?)\]\(([\s\S]*?)\)\s*/g;
   var pattern_content = /^\-\s([\s\S]*?)$/;
   var pattern_code = /^```([\s\S]*?)```$/m;
   var pattern_decomemo = /^\-mc([\s\S]*?)「([\s\S]*?)」$/;
   var pattern_memo = /^\-m([\s\S]*?)「([\s\S]*?)」$/;
   var pattern_baloon = /^\-t([\s\S]*?)「([\s\S]*?)」$/;
-  var pattern_image_a=/^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
+  var pattern_image_a = /^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
   var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
 
   const line_serch = vscode.window.activeTextEditor?.document.getText().split("\n");
@@ -27,7 +32,7 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
   let how_time_p: boolean[] = [];
 
   // <p>かどうかの配列
-  for (var j = 0; j < window_str.length; j++){
+  for (var j = 0; j < window_str.length; j++) {
     if (pattern_h1.test(window_str[j]) === false &&
       pattern_h2.test(window_str[j]) === false &&
       pattern_decomemo.test(window_str[j]) === false &&
@@ -55,14 +60,14 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
     // ヘッダー（##）の変換
     if (pattern_h2.test(window_str[k])) {
       var match = pattern_h2.exec(window_str[k]);
-      if(match!==null){
+      if (match !== null) {
         complish_str += "\n\t\t<h2>" + match[1] + "</h2>\n";
       }
     }
     // ヘッダー（#）の変換
     else if (pattern_h1.test(window_str[k])) {
       var match = pattern_h1.exec(window_str[k]);
-      if (match !== null){
+      if (match !== null) {
         complish_str += "\n\t\t<h1>" + match[1] + "</h1>\n";
       }
     }
@@ -80,7 +85,7 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
         program = program.replace(/\"/gm, "&quot;");
         program = program.replace(/\'/gm, "&apos;");
         program = program.replace(/\n/gm, "<br>");
-        
+
         // 改行用記号
         program = program.replace(/sabilog.space/gm, "");
 
@@ -144,6 +149,7 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
     }
     // 画像の変換
     else if (pattern_image_a.test(window_str[k])) {
+      // ctrl+s以外→更新なし
       if (updateNumber === 1) {
         var match = pattern_image_a.exec(window_str[k]);
 
@@ -153,6 +159,7 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
             '" class="art-image" />\n';
         }
       }
+      // ctrl+sのとき→art-draftに移す
       else if (updateNumber === 2) {
         var match = pattern_image_a.exec(window_str[k]);
 
@@ -163,27 +170,76 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
               lineNumber = i;
             }
           }
-          
-          console.log(filePath+match[2]);
+
+          console.log(filePath + match[2]);
           dl.uploadAndDeleteImage(
-            filePath+match[2],
-            "draft",
+            filePath + match[2],
+            "art-draft",
             lineNumber
           )
-          .then((secureUrl: string) => {
-            complish_str += '\n\t\t<img src="' + secureUrl + '" class="art-image" />\n';
-          })
-          .catch((error: any) => {
-            console.error("エラー:", error);
-          });
+            .then((secureUrl: string) => {
+              complish_str += '\n\t\t<img src="' + secureUrl + '" class="art-image" />\n';
+            })
+            .catch((error: any) => {
+              console.error("エラー:", error);
+            });
+        }
+      }
+
+      // makeDownloadfile→Filenameに移す
+      else if (updateNumber === 3) {
+        var match = pattern_image_a.exec(window_str[k]);
+
+        if (match && line_serch) {
+          var lineNumber = 0;
+          for (let i = 0; i < line_serch.length; i++) {
+            if (line_serch[i].includes(`(${match[2]})`)) {
+              lineNumber = i;
+            }
+          }
+
+          console.log(filePath + match[2]);
+          dl.uploadAndDeleteImage(
+            filePath + match[2],
+            fileName,
+            lineNumber
+          )
+            .then((secureUrl: string) => {
+              complish_str += '\n\t\t<img src="' + secureUrl + '" class="art-image" />\n';
+            })
+            .catch((error: any) => {
+              console.error("エラー:", error);
+            });
         }
       }
     }
     else if (pattern_image.test(window_str[k])) {
-      complish_str +=
-        '\n\t\t<img src="' +
-        window_str[k].substring(1) +
-        '" class="art-image" />\n';
+      var match = pattern_image.exec(window_str[k]);
+      // art-draftがついていて、makeDownloadfileのとき
+      if (match && match[0].includes("art-draft") && updateNumber === 3 && match && line_serch) {
+        var lineNumber = 0;
+        for (let i = 0; i < line_serch.length; i++) {
+          if (line_serch[i].includes(`${match[0]}`)) {
+            lineNumber = i;
+            console.log(lineNumber);
+          }
+        }
+
+        console.log(match[1], "⇒", fileName);
+        const upload_url = await dl.moveImage(match[1], fileName, lineNumber)
+          .catch((error: any) => {
+            console.error("エラー:", error);
+          });
+        complish_str += '\n\t\t<img src="' + upload_url + '" class="art-image" />\n';
+
+        console.log(complish_str);
+      }
+      else {
+        complish_str +=
+          '\n\t\t<img src="' +
+          window_str[k].substring(1) +
+          '" class="art-image" />\n';
+      }
     }
     // 項目（- コンテンツ）の変換
     else if (pattern_content.test(window_str[k])) {
@@ -191,13 +247,13 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
       if (contents_str != null) {
         var contents_list = contents_str[0].split(/\s*\-\s/);
         // 項目が1つ
-        if (contents_list.length-1 === 1) {
+        if (contents_list.length - 1 === 1) {
           complish_str +=
             "\n\t\t<ul>\n\t\t\t<li>" + contents_list[1] + "</li>\n\t\t\t</ul>\n";
         }
         // 項目が2つ以上
         else {
-          for (var j = 1; j < contents_list.length; j++){
+          for (var j = 1; j < contents_list.length; j++) {
             if (j === 1) {
               complish_str +=
                 "\n\t\t<ul>\n\t\t\t<li>" + contents_list[j] + "</li>\n\t\t\t<ul>";
@@ -244,7 +300,7 @@ export function convertMd(code: string, filePath: string, updateNumber: number) 
   return complish_str;
 }
 
-export function makeDisplay(mark: vscode.TextEditor, filePath: string, updateNumber: number) {
+export async function makeDisplay(mark: vscode.TextEditor, filePath: string, updateNumber: number) {
   var convertedHtml = "";
   var markdown = mark.document.getText();
   const pages = markdown.split("--p");
@@ -252,78 +308,78 @@ export function makeDisplay(mark: vscode.TextEditor, filePath: string, updateNum
 
   for (var k = 0; k < pages.length; k++) {
     const window = pages[k].split("---"); // 「---」で文章を区切る
-      if (k === 0) {
-        for (var i = 0; i < window.length; i++) {
-          if (i === 0) {
-            const header = titleWindow.split("\n\n");
+    if (k === 0) {
+      for (var i = 0; i < window.length; i++) {
+        if (i === 0) {
+          const header = titleWindow.split("\n\n");
 
+          convertedHtml +=
+            '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
+            '<div class="toppageImage" style="background-image: url(' +
+            header[1].substring(1) +
+            ');"></div>\n\t\t<h1>' +
+            header[0].substring(2) +
+            "</h1>\n\t\t<p>" +
+            header[2] +
+            "</p>\n\t\t</div>\n\t</div>";
+        } else if (i === 1) {
+          if (i === window.length - 1) {
             convertedHtml +=
-              '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
-              '<div class="toppageImage" style="background-image: url(' +
-              header[1].substring(1) +
-              ');"></div>\n\t\t<h1>' +
-              header[0].substring(2) +
-              "</h1>\n\t\t<p>" +
-              header[2] +
-              "</p>\n\t\t</div>\n\t</div>";
-          } else if (i === 1) {
-            if (i === window.length - 1) {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                convertMd(window[1], filePath, updateNumber) +
-                "\n\t\t</div>";
-            } else {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                convertMd(window[1], filePath, updateNumber) +
-                "\n\t\t</div>";
-            }
-          } else if (i === window.length - 1) {
-            convertedHtml +=
-              '\n\t\t<div class="window window-end">\n\t\t' +
-              convertMd(window[i], filePath, updateNumber) +
+              '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
+              await convertMd(window[1], filePath, updateNumber, "") +
               "\n\t\t</div>";
           } else {
             convertedHtml +=
-              '\n\t\t<div class="window">\n\t\t' +
-              convertMd(window[i], filePath, updateNumber) +
+              '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
+              await convertMd(window[1], filePath, updateNumber, "") +
               "\n\t\t</div>";
           }
-        }
-      } else {
-        for (var i = 0; i < window.length; i++) {
-          if (i === 0) {
-            if (i === window.length - 1) {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                convertMd(window[0], filePath, updateNumber) +
-                "\n\t\t</div>";
-            } else {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                convertMd(window[0], filePath, updateNumber) +
-                "\n\t\t</div>";
-            }
-          } else if (i === window.length - 1) {
-            convertedHtml +=
-              '\n\t\t<div class="window window-end">\n\t\t' +
-              convertMd(window[i], filePath, updateNumber) +
-              "\n\t\t</div>";
-          } else {
-            convertedHtml +=
-              '\n\t\t<div class="window">\n\t\t' +
-              convertMd(window[i], filePath, updateNumber) +
-              "\n\t\t</div>";
-          }
+        } else if (i === window.length - 1) {
+          convertedHtml +=
+            '\n\t\t<div class="window window-end">\n\t\t' +
+            await convertMd(window[i], filePath, updateNumber, "") +
+            "\n\t\t</div>";
+        } else {
+          convertedHtml +=
+            '\n\t\t<div class="window">\n\t\t' +
+            await convertMd(window[i], filePath, updateNumber, "") +
+            "\n\t\t</div>";
         }
       }
-    
+    } else {
+      for (var i = 0; i < window.length; i++) {
+        if (i === 0) {
+          if (i === window.length - 1) {
+            convertedHtml +=
+              '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
+              await convertMd(window[0], filePath, updateNumber, "") +
+              "\n\t\t</div>";
+          } else {
+            convertedHtml +=
+              '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
+              await convertMd(window[0], filePath, updateNumber, "") +
+              "\n\t\t</div>";
+          }
+        } else if (i === window.length - 1) {
+          convertedHtml +=
+            '\n\t\t<div class="window window-end">\n\t\t' +
+            await convertMd(window[i], filePath, updateNumber, "") +
+            "\n\t\t</div>";
+        } else {
+          convertedHtml +=
+            '\n\t\t<div class="window">\n\t\t' +
+            await convertMd(window[i], filePath, updateNumber, "") +
+            "\n\t\t</div>";
+        }
+      }
+    }
+
     convertedHtml += "\n\t</div>";
   }
   return convertedHtml;
 }
 
-export function makeDownloadFile(
+export async function makeDownloadFile(
   pages: string,
   k: number,
   pageKey: number,
@@ -347,237 +403,238 @@ export function makeDownloadFile(
   icons = icons.split("sabilog_artnum").join(artnum);
 
   const window = pages.split("---"); // 「---」で文章を区切る
-    if (pageKey === 1) {
-      icons = icons.split("sabilog_pagenum");
-      icons = icons.join("");
-      for (var i = 0; i < window.length; i++) {
-        if (i === 0) {
-          convertedHtml +=
-            '\n<div class="toppage">' +
-            '\n\t<div class="art-header">' +
-            '\n\t\t<div class="toppageImage" style="background-image: url(' +
-            imageurl +
-            ');"></div>\n\t\t<h1>' +
-            headertitle +
-            "</h1>\n\t\t<p>" +
-            headersent +
-            "</p>\n" +
-            icons +
-            "\n\t</div>\n</div>\n";
-        } else if (i === 1) {
-          if (i === window.length - 1) {
-            convertedHtml +=
-              '\n<div class="headline">' +
-              '\n\n\t<div class="top-window window-end">\n' +
-              convertMd(window[1], filepath, 2) +
-              "\n\t</div>";
-          } else {
-            convertedHtml +=
-              '\n<div class="headline">' +
-              '\n\n\t<div class="top-window">\n' +
-              convertMd(window[1], filepath, 2) +
-              "\n\t</div>";
-          }
-        } else if (i === window.length - 1) {
-          convertedHtml +=
-            '\n\t<div class="window window-end">\n' +
-            convertMd(window[i], filepath, 2) +
-            "\n\t</div>";
-        } else {
-          convertedHtml +=
-            '\n\t<div class="window">\n' +
-            convertMd(window[i], filepath, 2) +
-            "\n\t</div>";
-        }
-      }
-
-    convertedHtml += "\n\t</div>";
-    } else {
-      icons = icons.split("sabilog_pagenum");
-      icons = icons.join(pagenum);
-      if (k === 0) {
-        var top_next = ex.topnextContent;
-        var down_next = "";
-
-        // top_nextの設定
-        top_next = top_next.split("sabilog_previnv").join("page-inv");
-        top_next = top_next.split("sabilog_prevurl").join("");
-        top_next = top_next.split("sabilog_nextinv").join("");
-        top_next = top_next
-          .split("sabilog_nexturl")
-          .join(
-            'href="./ho-0' + `${artnum}` + "-" + `${k + 2}` + '.html"'
-          );
-        top_next = top_next.split("sabilog_prevnom").join(`${k}`);
-        top_next = top_next.split("sabilog_nownom").join(`${k + 1}`);
-        top_next = top_next.split("sabilog_nextnom").join(`${k + 2}`);
-
-        // down_nextの設定
-        down_next = ex.downnextContent;
-        down_next = down_next
-          .split("sabilog_nexturl")
-          .join("./ho-0" + `${artnum}` + "-" + `${k + 2}` + ".html");
-        var nextpage_sp = nextpages.split("---");
-        nextpage_sp = nextpage_sp[0].split("\n\n");
-
-        var down_text_num = -1;
-        down_text_num = nextpage_sp.findIndex((number) =>number.includes("-p"));
-        
-        if (down_text_num!==-1) {
-          const down_text_list = nextpage_sp[down_text_num].substring(3);
-          down_next = down_next
-            .split("sabilog_nexttitle")
-            .join(down_text_list);
-        } else {
-          down_text_num = nextpage_sp.findIndex((number) =>
-            number.includes("##")
-          );
-          const down_text_list = nextpage_sp[down_text_num].substring(3);
-          down_next = down_next
-            .split("sabilog_nexttitle")
-            .join(down_text_list);
-        }
-      
-        for (var i = 0; i < window.length; i++) {
-          if (i === 0) {
-            convertedHtml +=
-              '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
-              '<div class="toppageImage" style="background-image: url(' +
-              imageurl +
-              ');"></div>\n\t\t<h1>' +
-              headertitle +
-              "</h1>\n\t\t<p>" +
-              headersent +
-              "</p>\n\t" +
-              icons +
-              "\n\t\t</div>\n\t</div>";
-          } else if (i === 1) {
-            if (i === window.length - 1) {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' + top_next + "\n\t\t" +
-                convertMd(window[1], filepath, 2) + "\n\t\t" + down_next +
-                "\n\t\t</div>";
-            } else {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' + top_next +
-                convertMd(window[1], filepath, 2) +
-                "\n\t\t</div>";
-            }
-          } else if (i === window.length - 1) {
-            convertedHtml +=
-              '\n\t\t<div class="window window-end">\n\t\t' +
-              convertMd(window[i], filepath, 2) + "\n\t\t" + down_next +
-              "\n\t\t</div>";
-          } else {
-            convertedHtml +=
-              '\n\t\t<div class="window">\n\t\t' +
-              convertMd(window[i], filepath, 2) +
-              "\n\t\t</div>";
-          }
-        }
-      } else {
+  if (pageKey === 1) {
+    icons = icons.split("sabilog_pagenum");
+    icons = icons.join("");
+    for (var i = 0; i < window.length; i++) {
+      if (i === 0) {
         convertedHtml +=
-          '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
-          '<div class="toppageImage" style="background-image: url(' +
+          '\n<div class="toppage">' +
+          '\n\t<div class="art-header">' +
+          '\n\t\t<div class="toppageImage" style="background-image: url(' +
           imageurl +
           ');"></div>\n\t\t<h1>' +
           headertitle +
           "</h1>\n\t\t<p>" +
           headersent +
-          "</p>\n\t" +
+          "</p>\n" +
           icons +
-          "\n\t\t</div>\n\t</div>";
-        
-        for (var i = 0; i < window.length; i++) {
-          var top_next = ex.topnextContent;
-          var down_next = "";
+          "\n\t</div>\n</div>\n";
+      } else if (i === 1) {
+        if (i === window.length - 1) {
+          convertedHtml +=
+            '\n<div class="headline">' +
+            '\n\n\t<div class="top-window window-end">\n' +
+            await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) +
+            "\n\t</div>";
+        } else {
+          convertedHtml +=
+            '\n<div class="headline">' +
+            '\n\n\t<div class="top-window">\n' +
+            await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) +
+            "\n\t</div>";
+        }
+      } else if (i === window.length - 1) {
+        convertedHtml +=
+          '\n\t<div class="window window-end">\n' +
+          await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
+          "\n\t</div>";
+      } else {
+        convertedHtml +=
+          '\n\t<div class="window">\n' +
+          await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
+          "\n\t</div>";
+      }
+    }
 
-          // top_nextの設定
-          top_next = top_next.split("sabilog_previnv").join("");
-          top_next = top_next
-            .split("sabilog_prevurl")
-            .join(
-              'href="./ho-0' + `${artnum}` + "-" + `${k - 1}` + '.html"'
-            );
+    convertedHtml += "\n\t</div>";
+  } else {
+    icons = icons.split("sabilog_pagenum");
+    icons = icons.join(pagenum);
+    if (k === 0) {
+      var top_next = ex.topnextContent;
+      var down_next = "";
 
-          if (k === maxpage - 1) {
-            top_next = top_next.split("sabilog_nextinv").join("page-inv");
-            top_next = top_next.split("sabilog_nexturl").join("");
-          } else {
-            top_next = top_next.split("sabilog_nextinv").join("");
-            top_next = top_next
-              .split("sabilog_nexturl")
-              .join(
-                'href="./ho-0' + `${artnum}` + "-" + `${k + 2}` + '.html"'
-              );
-          }
+      // top_nextの設定
+      top_next = top_next.split("sabilog_previnv").join("page-inv");
+      top_next = top_next.split("sabilog_prevurl").join("");
+      top_next = top_next.split("sabilog_nextinv").join("");
+      top_next = top_next
+        .split("sabilog_nexturl")
+        .join(
+          'href="./ho-' + `${formatNumber(artnum)}` + "-" + `${k + 2}` + '.html"'
+        );
+      top_next = top_next.split("sabilog_prevnom").join(`${k}`);
+      top_next = top_next.split("sabilog_nownom").join(`${k + 1}`);
+      top_next = top_next.split("sabilog_nextnom").join(`${k + 2}`);
 
-          top_next = top_next.split("sabilog_prevnom").join(`${k}`);
-          top_next = top_next.split("sabilog_nownom").join(`${k + 1}`);
-          top_next = top_next.split("sabilog_nextnom").join(`${k + 2}`);
+      // down_nextの設定
+      down_next = ex.downnextContent;
+      down_next = down_next
+        .split("sabilog_nexturl")
+        .join("./ho-" + `${formatNumber(artnum)}` + "-" + `${k + 2}` + ".html");
+      var nextpage_sp = nextpages.split("---");
+      nextpage_sp = nextpage_sp[0].split("\n\n");
 
-          // down_nextの設定
-          if (k !== maxpage - 1) {
-            down_next = ex.downnextContent;
-            down_next = down_next
-              .split("sabilog_nexturl")
-              .join("./ho-0" + `${artnum}` + "-" + `${k + 2}` + ".html");
-            var nextpage_sp = nextpages.split("---");
-            nextpage_sp = nextpage_sp[0].split("\n\n");
+      var down_text_num = -1;
+      down_text_num = nextpage_sp.findIndex((number) => number.includes("-p"));
 
-            var down_text_num = -1;
-            down_text_num = nextpage_sp.findIndex((number) =>number.includes("-p"));
-            
-            if (down_text_num!==-1) {
-              const down_text_list = nextpage_sp[down_text_num].substring(3);
-              down_next = down_next
-                .split("sabilog_nexttitle")
-                .join(down_text_list);
-            } else {
-              down_text_num = nextpage_sp.findIndex((number) =>
-                number.includes("##")
-              );
-              const down_text_list = nextpage_sp[down_text_num].substring(3);
-              down_next = down_next
-                .split("sabilog_nexttitle")
-                .join(down_text_list);
-            }
-          }
+      if (down_text_num !== -1) {
+        const down_text_list = nextpage_sp[down_text_num].substring(3);
+        down_next = down_next
+          .split("sabilog_nexttitle")
+          .join(down_text_list);
+      } else {
+        down_text_num = nextpage_sp.findIndex((number) =>
+          number.includes("##")
+        );
+        const down_text_list = nextpage_sp[down_text_num].substring(3);
+        down_next = down_next
+          .split("sabilog_nexttitle")
+          .join(down_text_list);
+      }
 
-          if (i === 0) {
-            if (i === window.length - 1) {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
-                top_next + "\n\t\t" +
-                convertMd(window[0], filepath, 2) +
-                "\n\t\t" +
-                down_next +
-                "\n\t\t</div>";
-            } else {
-              convertedHtml +=
-                '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
-                top_next + "\n" +
-                convertMd(window[0], filepath, 2) +
-                "\n\t\t</div>";
-            }
-          } else if (i === window.length - 1) {
+      for (var i = 0; i < window.length; i++) {
+        if (i === 0) {
+          convertedHtml +=
+            '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
+            '<div class="toppageImage" style="background-image: url(' +
+            imageurl +
+            ');"></div>\n\t\t<h1>' +
+            headertitle +
+            "</h1>\n\t\t<p>" +
+            headersent +
+            "</p>\n\t" +
+            icons +
+            "\n\t\t</div>\n\t</div>";
+        } else if (i === 1) {
+          if (i === window.length - 1) {
             convertedHtml +=
-              '\n\t\t<div class="window window-end">\n\t\t' +
-              convertMd(window[i], filepath, 2) +
+              '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' + top_next + "\n\t\t" +
+              await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) + "\n\t\t" + down_next +
+              "\n\t\t</div>";
+          } else {
+            convertedHtml +=
+              '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' + top_next +
+              await convertMd(window[1], filepath, 3, "art-" + `${artnum}`) +
+              "\n\t\t</div>";
+          }
+        } else if (i === window.length - 1) {
+          convertedHtml +=
+            '\n\t\t<div class="window window-end">\n\t\t' +
+            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) + "\n\t\t" + down_next +
+            "\n\t\t</div>";
+        } else {
+          convertedHtml +=
+            '\n\t\t<div class="window">\n\t\t' +
+            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
+            "\n\t\t</div>";
+        }
+      }
+    } else {
+      convertedHtml +=
+        '\n\t<div class="toppage">\n\t\t<div class="art-header">\n\t\t' +
+        '<div class="toppageImage" style="background-image: url(' +
+        imageurl +
+        ');"></div>\n\t\t<h1>' +
+        headertitle +
+        "</h1>\n\t\t<p>" +
+        headersent +
+        "</p>\n\t" +
+        icons +
+        "\n\t\t</div>\n\t</div>";
+
+      for (var i = 0; i < window.length; i++) {
+        var top_next = ex.topnextContent;
+        var down_next = "";
+
+        // top_nextの設定
+        top_next = top_next.split("sabilog_previnv").join("");
+        top_next = top_next
+          .split("sabilog_prevurl")
+          .join(
+            'href="./ho-' + `${formatNumber(artnum)}` + "-" + `${k - 1}` + '.html"'
+          );
+
+        if (k === maxpage - 1) {
+          top_next = top_next.split("sabilog_nextinv").join("page-inv");
+          top_next = top_next.split("sabilog_nexturl").join("");
+        } else {
+          top_next = top_next.split("sabilog_nextinv").join("");
+          top_next = top_next
+            .split("sabilog_nexturl")
+            .join(
+              'href="./ho-' + `${formatNumber(artnum)}` + "-" + `${k + 2}` + '.html"'
+            );
+        }
+
+        top_next = top_next.split("sabilog_prevnom").join(`${k}`);
+        top_next = top_next.split("sabilog_nownom").join(`${k + 1}`);
+        top_next = top_next.split("sabilog_nextnom").join(`${k + 2}`);
+
+        // down_nextの設定
+        if (k !== maxpage - 1) {
+          down_next = ex.downnextContent;
+          down_next = down_next
+            .split("sabilog_nexturl")
+            .join("./ho-" + `${formatNumber(artnum)}` + "-" + `${k + 2}` + ".html");
+          var nextpage_sp = nextpages.split("---");
+          nextpage_sp = nextpage_sp[0].split("\n\n");
+
+          var down_text_num = -1;
+          down_text_num = nextpage_sp.findIndex((number) => number.includes("-p"));
+
+          if (down_text_num !== -1) {
+            const down_text_list = nextpage_sp[down_text_num].substring(3);
+            down_next = down_next
+              .split("sabilog_nexttitle")
+              .join(down_text_list);
+          } else {
+            down_text_num = nextpage_sp.findIndex((number) =>
+              number.includes("##")
+            );
+            const down_text_list = nextpage_sp[down_text_num].substring(3);
+            down_next = down_next
+              .split("sabilog_nexttitle")
+              .join(down_text_list);
+          }
+        }
+
+        if (i === 0) {
+          if (i === window.length - 1) {
+            convertedHtml +=
+              '\n\t<div class="headline">\n\t\t<div class="top-window window-end">\n\t\t' +
+              top_next + "\n\t\t" +
+              await convertMd(window[0], filepath, 3, "art-" + `${artnum}`) +
               "\n\t\t" +
               down_next +
               "\n\t\t</div>";
           } else {
             convertedHtml +=
-              '\n\t\t<div class="window">\n\t\t' +
-              convertMd(window[i], filepath, 2) +
+              '\n\t<div class="headline">\n\t\t<div class="top-window">\n\t\t' +
+              top_next + "\n" +
+              await convertMd(window[0], filepath, 3, "art-" + `${artnum}`) +
               "\n\t\t</div>";
           }
+        } else if (i === window.length - 1) {
+          convertedHtml +=
+            '\n\t\t<div class="window window-end">\n\t\t' +
+            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
+            "\n\t\t" +
+            down_next +
+            "\n\t\t</div>";
+        } else {
+          convertedHtml +=
+            '\n\t\t<div class="window">\n\t\t' +
+            await convertMd(window[i], filepath, 3, "art-" + `${artnum}`) +
+            "\n\t\t</div>";
         }
       }
-      
-    convertedHtml += "\n\t</div>";
     }
+
+    console.log("finish");
+    convertedHtml += "\n\t</div>";
+  }
   return header + convertedHtml + ex.footerContent;
 }
 
@@ -585,13 +642,13 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
   // 正規表現パターンを定義
   var pattern_h1 = /^#\s+([\s\S]*?)$/;
   var pattern_h2 = /^##\s+([\s\S]*?)$/;
-  var pattern_bolita =/\*\*\*([\s\S]*?)\*\*\*\s*/;
-  var pattern_bold =/\*\*([\s\S]*?)\*\*\s*/;
-  var pattern_italic =/\*([\s\S]*?)\*\s*/;
-  var pattern_link =/\[([\s\S]*?)\]\(([\s\S]*?)\)\s*/;
+  var pattern_bolita = /\*\*\*([\s\S]*?)\*\*\*\s*/;
+  var pattern_bold = /\*\*([\s\S]*?)\*\*\s*/;
+  var pattern_italic = /\*([\s\S]*?)\*\s*/;
+  var pattern_link = /\[([\s\S]*?)\]\(([\s\S]*?)\)\s*/;
   var pattern_content = /^\-\s([\s\S]*?)$/;
   var pattern_code = /^```([\s\S]*?)\n([\s\S]*?)```$/m;
-  var pattern_image_a=/^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
+  var pattern_image_a = /^\!\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
   var pattern_image = /^\!https\:\/\/res\.cloudinary\.com([\s\S]*?)$/;
   var pattern_label = /^\-p\s([\s\S]*?)$/;
   var pattern_baloon = /^\-t([\s\S]*?)「([\s\S]*?)」$/;
@@ -673,20 +730,20 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
     else if (pattern_image_a.test(pages[k])) {
       var match = pattern_image_a.exec(pages[k]);
 
-        if (match && line_serch) {
-          var lineNumber = 0;
-          for (let i = 0; i < line_serch.length; i++) {
-            if (line_serch[i].includes(`(${match[2]})`)) {
-              lineNumber = i;
-            }
+      if (match && line_serch) {
+        var lineNumber = 0;
+        for (let i = 0; i < line_serch.length; i++) {
+          if (line_serch[i].includes(`(${match[2]})`)) {
+            lineNumber = i;
           }
-          
-          console.log(filePath+match[2]);
-          dl.uploadAndDeleteImage(
-            filePath+match[2],
-            "draft",
-            lineNumber
-          )
+        }
+
+        console.log(filePath + match[2]);
+        dl.uploadAndDeleteImage(
+          filePath + match[2],
+          "art-draft",
+          lineNumber
+        )
           .then((secureUrl: string) => {
             pagescript.push(
               {
@@ -703,27 +760,32 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
           .catch((error: any) => {
             console.error("エラー:", error);
           });
-        }
+      }
     }
     else if (pattern_image.test(pages[k])) {
-      pagescript.push(
-        {
-          type: "image",
-          image: {
-            type: "external",
-            external: {
-              url: pages[k].substring(1),
+      var match = pattern_image.exec(pages[k]);
+
+      if (match) {
+
+        pagescript.push(
+          {
+            type: "image",
+            image: {
+              type: "external",
+              external: {
+                url: match[0].substring(1),
+              },
             },
-          },
-        }
-      );
+          }
+        );
+      }
     }
     // 項目（- コンテンツ）の変換
     else if (pattern_content.test(pages[k])) {
       const contents_str = pattern_content.exec(pages[k]);
       if (contents_str !== null) {
         var contents_list = contents_str[1].split(/\n\s*\-\s/);
-        
+
         // 項目が1つ
         if (contents_list.length === 1) {
           pagescript.push(
@@ -776,14 +838,13 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
     else {
       var match_letter = pattern_newline.exec(pages[k]);
       if (match_letter !== null) {
-       if (pattern_label.test(match_letter[1]) ||
+        if (pattern_label.test(match_letter[1]) ||
           pattern_baloon.test(match_letter[1]) ||
           pattern_memo.test(match_letter[1]) ||
           pattern_decomemo.test(match_letter[1]) ||
           pattern_tag1.test(match_letter[1]) ||
           pattern_tag2.test(match_letter[1]) ||
-          pattern_sent.test(match_letter[1]))
-        {
+          pattern_sent.test(match_letter[1])) {
           pagescript.push(
             {
               object: "block",
@@ -794,10 +855,9 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
           );
         }
         else {
-         const letters = match_letter[1].split(" ");
-         console.log(letters);
+          const letters = match_letter[1].split(" ");
           var text = [];
-          for (var i = 0; i < letters.length; i++){
+          for (var i = 0; i < letters.length; i++) {
             // 強調斜体（***テキスト***）の変換
             if (pattern_bolita.test(letters[i])) {
               var match = pattern_bolita.exec(letters[i]);
@@ -884,7 +944,6 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
               }
             }
           }
-         console.log(text);
           pagescript.push(
             {
               object: "block",
@@ -893,7 +952,7 @@ export function makeUpdateFile(mark: vscode.TextEditor, filePath: string) {
               },
             }
           );
-        } 
+        }
       }
     }
   }
@@ -910,7 +969,7 @@ export async function replaceImage(lineNumber: number, url: string) {
       const line = document.lineAt(lineNumber);
       const range = new vscode.Range(line.range.start, line.range.end);
       editBuilder.delete(range);
-      editBuilder.insert(new vscode.Position(lineNumber, 0), "!"+url);
+      editBuilder.insert(new vscode.Position(lineNumber, 0), "!" + url);
     }).then(success => {
       if (success) {
         console.log(`Replaced ${url}`);

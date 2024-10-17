@@ -16,8 +16,7 @@ export var Archives = {
   旅行: "tour_archive.html",
   長編: "long_archive.html",
   身内: "family_archive.html",
-  ゲーム: "game_archive.html",
-  none:""
+  ゲーム: "game_archive.html"
 };
 
 export var setting = {
